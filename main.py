@@ -284,3 +284,60 @@ async def get_categories(company_name: str):
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
+
+@app.get("/allitems/{company_name}")
+async def get_allitems(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        allitems_query = (
+            f"SELECT * FROM items"
+        )
+
+        cursor.execute(allitems_query)
+        allitems = cursor.fetchall()
+
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        items_list = [dict(zip(column_names, allitem)) for allitem in allitems]
+
+        print("hol alllllllllll itemsssss", items_list)
+
+        return items_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+@app.get("/categoriesitems/{company_name}/{category_id}")
+async def get_itemsCategories(company_name: str, category_id: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        categoryitems_query = (
+            f"SELECT items.code, items.title, items.image, items.price FROM items INNER JOIN groupItem ON items.groupItem_code = groupItem.code WHERE  groupItem.code={category_id}"
+        )
+
+        cursor.execute(categoryitems_query)
+        categoriesitems = cursor.fetchall()
+
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        categories_list = [dict(zip(column_names, categoryitem)) for categoryitem in categoriesitems]
+
+        print("hol l itemssssssssssssss in each categories", categories_list)
+
+        return categories_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
