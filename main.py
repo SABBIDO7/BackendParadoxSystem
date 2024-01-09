@@ -341,3 +341,48 @@ async def get_itemsCategories(company_name: str, category_id: str):
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
+
+
+@app.post("/invoiceitem/{company_name}")
+async def post_invoiceitem(company_name: str, request: Request):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Insert into invoices table
+        cursor.execute("INSERT INTO invoices () VALUES ();")
+
+        # Get the last inserted invoice code
+        invoice_code = cursor.lastrowid
+
+        data = await request.json()
+        print("itemssssssssssssssss codeeeeeeeeeeeeee", data)
+
+        overall_total = 0
+
+        for item in data:
+            # Calculate the total price for the current item
+            total_price = item["price"] * item["quantity"]
+
+            # Add the total price to the overall total
+            overall_total += total_price
+
+            # Insert the item into the database with the calculated total price
+            cursor.execute(
+                "INSERT INTO invoicesitems (item_code, invoice_code, quantity, total) VALUES (%s, %s, %s, %s);",
+                (item["code"], invoice_code, item["quantity"], total_price))
+
+        cursor.execute("UPDATE invoices SET total = %s WHERE code = %s;", (overall_total, invoice_code))
+
+        conn.commit()
+
+
+        # Return the inserted data or any other relevant response
+        return {"message": "Invoice items added successfully"}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
