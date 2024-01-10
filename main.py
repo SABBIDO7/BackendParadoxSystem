@@ -320,7 +320,7 @@ async def get_itemsCategories(company_name: str, category_id: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         categoryitems_query = (
-            f"SELECT items.code, items.title, items.image, items.price FROM items INNER JOIN groupItem ON items.groupItem_code = groupItem.code WHERE  groupItem.code={category_id}"
+            f"SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice FROM items INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo WHERE  groupItem.GroupNo={category_id}"
         )
 
         cursor.execute(categoryitems_query)
@@ -351,7 +351,7 @@ async def post_invoiceitem(company_name: str, request: Request):
         cursor = conn.cursor()
 
         # Insert into invoices table
-        cursor.execute("INSERT INTO invoices () VALUES ();")
+        cursor.execute("INSERT INTO invnum () VALUES ();")
 
         # Get the last inserted invoice code
         invoice_code = cursor.lastrowid
@@ -363,17 +363,19 @@ async def post_invoiceitem(company_name: str, request: Request):
 
         for item in data:
             # Calculate the total price for the current item
-            total_price = item["price"] * item["quantity"]
+            total_price = item["UPrice"] * item["quantity"]
 
             # Add the total price to the overall total
             overall_total += total_price
 
             # Insert the item into the database with the calculated total price
             cursor.execute(
-                "INSERT INTO invoicesitems (item_code, invoice_code, quantity, total) VALUES (%s, %s, %s, %s);",
-                (item["code"], invoice_code, item["quantity"], total_price))
+                "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                (
+                "SAY", invoice_code, item["ItemNo"], "barc", "Cornish", item["quantity"], item["UPrice"], 0, 0)
+            )
 
-        cursor.execute("UPDATE invoices SET total = %s WHERE code = %s;", (overall_total, invoice_code))
+        #cursor.execute("UPDATE invnum SET total = %s WHERE code = %s;", (overall_total, invoice_code))
 
         conn.commit()
 
