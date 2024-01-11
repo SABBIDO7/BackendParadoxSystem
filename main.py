@@ -62,6 +62,12 @@ async def login(request: Request):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        user = dict(zip(column_names, user))
+        print("LOGGEEDDDDDDDDDD INNNNNNNNNNNNNNN USERRRRRRRRRRRRRRRRRRR")
         print("Received data:", username, password, company_name)
         print("Authentication successful:", username, company_name)
         return {"message": "Login successful", "user": user}
@@ -343,8 +349,8 @@ async def get_itemsCategories(company_name: str, category_id: str):
         pass
 
 
-@app.post("/invoiceitem/{company_name}")
-async def post_invoiceitem(company_name: str, request: Request):
+@app.post("/invoiceitem/{company_name}/{Branch}/{SAType}")
+async def post_invoiceitem(company_name: str, Branch: str, SAType: str, request: Request):
     try:
         # Establish the database connection
         conn = get_db(company_name)
@@ -362,6 +368,14 @@ async def post_invoiceitem(company_name: str, request: Request):
         overall_total = 0
 
         for item in data:
+            # Fetch the Disc and Tax values from the items table
+            cursor.execute("SELECT Disc, Tax FROM items WHERE ItemNo = %s;", (item["ItemNo"],))
+            result = cursor.fetchone()
+
+            if result:
+                disc, tax = result
+            else:
+                disc, tax = 0, 0
             # Calculate the total price for the current item
             total_price = item["UPrice"] * item["quantity"]
 
@@ -372,7 +386,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             cursor.execute(
                 "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);",
                 (
-                "SAY", invoice_code, item["ItemNo"], "barc", "Cornish", item["quantity"], item["UPrice"], 0, 0)
+                    SAType, invoice_code, item["ItemNo"], "barc", Branch, item["quantity"], item["UPrice"], disc, tax)
             )
 
         #cursor.execute("UPDATE invnum SET total = %s WHERE code = %s;", (overall_total, invoice_code))
