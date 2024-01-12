@@ -3,6 +3,7 @@ import json
 from fastapi import FastAPI, HTTPException, Request
 import mysql.connector
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 
 app = FastAPI()
 
@@ -349,8 +350,8 @@ async def get_itemsCategories(company_name: str, category_id: str):
         pass
 
 
-@app.post("/invoiceitem/{company_name}/{Branch}/{SAType}")
-async def post_invoiceitem(company_name: str, Branch: str, SAType: str, request: Request):
+@app.post("/invoiceitem/{company_name}/{Branch}/{SAType}/{Date}/{DSValue}")
+async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: str, DSValue: float, request: Request):
     try:
         # Establish the database connection
         conn = get_db(company_name)
@@ -361,6 +362,7 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, request:
 
         # Get the last inserted invoice code
         invoice_code = cursor.lastrowid
+        parsed_date = datetime.strptime(Date, "%d-%m-%Y %H%M%S")
 
         data = await request.json()
         print("itemssssssssssssssss codeeeeeeeeeeeeee", data)
@@ -388,6 +390,13 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, request:
                 (
                     SAType, invoice_code, item["ItemNo"], "barc", Branch, item["quantity"], item["UPrice"], disc, tax)
             )
+
+        cursor.execute(
+            "UPDATE invnum SET Date = %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
+            (
+                parsed_date, "accno", "cardno", Branch, DSValue, 5, SAType, invoice_code
+            )
+        )
 
         #cursor.execute("UPDATE invnum SET total = %s WHERE code = %s;", (overall_total, invoice_code))
 
