@@ -327,7 +327,7 @@ async def get_itemsCategories(company_name: str, category_id: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         categoryitems_query = (
-            f"SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice FROM items INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo WHERE  groupItem.GroupNo={category_id}"
+            f"SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax FROM items INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo WHERE  groupItem.GroupNo={category_id}"
         )
 
         cursor.execute(categoryitems_query)
@@ -350,8 +350,8 @@ async def get_itemsCategories(company_name: str, category_id: str):
         pass
 
 
-@app.post("/invoiceitem/{company_name}/{Branch}/{SAType}/{Date}/{DSValue}")
-async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: str, DSValue: float, request: Request):
+@app.post("/invoiceitem/{company_name}/{Branch}/{SAType}/{Date}/{DSValue}/{Srv}")
+async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: str, DSValue: float, Srv:float,request: Request):
     try:
         # Establish the database connection
         conn = get_db(company_name)
@@ -394,7 +394,7 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
         cursor.execute(
             "UPDATE invnum SET Date = %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
             (
-                parsed_date, "accno", "cardno", Branch, DSValue, 5, SAType, invoice_code
+                parsed_date, "accno", "cardno", Branch, DSValue, Srv, SAType, invoice_code
             )
         )
 
