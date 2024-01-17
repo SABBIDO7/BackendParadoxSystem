@@ -327,10 +327,13 @@ async def get_itemsCategories(company_name: str, category_id: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         categoryitems_query = (
-            f"SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax FROM items INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo WHERE  groupItem.GroupNo={category_id}"
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax "
+            "FROM items "
+            "INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo "
+            "WHERE groupItem.GroupNo=%s"
         )
 
-        cursor.execute(categoryitems_query)
+        cursor.execute(categoryitems_query, (category_id,))
         categoriesitems = cursor.fetchall()
 
         # Get column names from cursor.description
@@ -405,6 +408,37 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
 
         # Return the inserted data or any other relevant response
         return {"message": "Invoice items added successfully"}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.get("/getModifiers/{company_name}")
+async def get_modifiers(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        modifieritems_query = (
+            "SELECT ItemNo, ItemName, Image "
+            "FROM items "
+            "WHERE GroupNo=%s"
+        )
+
+        cursor.execute(modifieritems_query, ("MOD",))
+        modifiersitems = cursor.fetchall()
+
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        modifiers_list = [dict(zip(column_names, modifyitem)) for modifyitem in modifiersitems]
+
+        print("hol l itemssssssssssssss in each categories", modifiers_list)
+
+        return modifiers_list
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
