@@ -270,7 +270,7 @@ async def get_categories(company_name: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         category_query = (
-            f"SELECT * FROM groupitem"
+            f"SELECT * FROM groupitem WHERE GroupNo != 'MOD'"
         )
 
         cursor.execute(category_query)
@@ -299,7 +299,8 @@ async def get_allitems(company_name: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         allitems_query = (
-            f"SELECT * FROM items"
+            "SELECT * FROM items "
+            "WHERE GroupNo != 'MOD'"
         )
 
         cursor.execute(allitems_query)
@@ -327,7 +328,7 @@ async def get_itemsCategories(company_name: str, category_id: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         categoryitems_query = (
-            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax "
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4 "
             "FROM items "
             "INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo "
             "WHERE groupItem.GroupNo=%s"
@@ -374,13 +375,13 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
 
         for item in data:
             # Fetch the Disc and Tax values from the items table
-            cursor.execute("SELECT Disc, Tax FROM items WHERE ItemNo = %s;", (item["ItemNo"],))
-            result = cursor.fetchone()
-
-            if result:
-                disc, tax = result
-            else:
-                disc, tax = 0, 0
+            # cursor.execute("SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;", (item["ItemNo"],))
+            # result = cursor.fetchone()
+            #
+            # if result:
+            #     disc, tax, GroupNo, KT1, KT2, KT3, KT4 = result
+            # else:
+            #     disc, tax = 0, 0
             # Calculate the total price for the current item
             total_price = item["UPrice"] * item["quantity"]
 
@@ -389,10 +390,33 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
 
             # Insert the item into the database with the calculated total price
             cursor.execute(
-                "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                 (
-                    SAType, invoice_code, item["ItemNo"], "barc", Branch, item["quantity"], item["UPrice"], disc, tax)
+                    SAType, invoice_code, item["ItemNo"], "barc", Branch, item["quantity"], item["UPrice"],
+                    item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"]
+                )
             )
+
+            if "chosenModifiers" in item and item["chosenModifiers"]:
+                for chosenModifier in item["chosenModifiers"]:
+                    # Fetch the Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 values from the items table
+                    cursor.execute("SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;",
+                                   (chosenModifier["ItemNo"],))
+                    result = cursor.fetchone()
+
+                    if result:
+                        disc, tax, group_no, kt1, kt2, kt3, kt4 = result
+                    else:
+                        disc, tax, group_no, kt1, kt2, kt3, kt4 = 0, 0, "MOD", 0, 0, 0, 0
+
+                    # Continue with your INSERT statement using the fetched values
+                    cursor.execute(
+                        "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                        (
+                            SAType, invoice_code, chosenModifier["ItemNo"], "barc", Branch, item["quantity"],
+                            item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4
+                        )
+                    )
 
         cursor.execute(
             "UPDATE invnum SET Date = %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
@@ -445,3 +469,123 @@ async def get_modifiers(company_name: str):
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
+
+@app.get("/allitemswithmod/{company_name}")
+async def get_allitemswithmod(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        allitems_query = (
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, groupitem.GroupName "
+            "FROM items "
+            "JOIN groupitem ON items.GroupNo = groupitem.GroupNo;"
+        )
+
+        cursor.execute(allitems_query)
+        allitems = cursor.fetchall()
+
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        items_list = [dict(zip(column_names, allitem)) for allitem in allitems]
+
+        print("hol alllllllllll itemsssss", items_list)
+
+        return items_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.get("/groupitems/{company_name}")
+async def get_groupitems(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        allgroups_query = (
+            "SELECT *  from groupitem "
+        )
+
+        cursor.execute(allgroups_query)
+        allgroups = cursor.fetchall()
+
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        grps_list = [dict(zip(column_names, allgrp)) for allgrp in allgroups]
+
+        print("hol alllllllllll itemsssss", grps_list)
+
+        return grps_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.post("/updateItems/{company_name}/{item_id}")
+async def update_item(
+        company_name: str,
+        item_id: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Check if the user exists
+        user_query = "SELECT * FROM items WHERE ItemNo = %s"
+        cursor.execute(user_query, (item_id,))
+        user = cursor.fetchone()
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get JSON data from request body
+        data = await request.json()
+        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
+
+        # Construct the SQL update query
+        update_query = (
+            "UPDATE items SET ItemNo = %s, GroupNo = %s, ItemName = %s, "
+            "Image = %s, UPrice = %s, Disc = %s, Tax = %s, KT1 = %s, KT2 = %s, KT3 = %s, KT4 = %s "
+            "WHERE ItemNo = %s"
+        )
+        update_values = [
+            data["ItemNo"],
+            data["GroupNo"],
+            data["ItemName"],
+            data["Image"],
+            data["UPrice"],
+            data["Disc"],
+            data["Tax"],
+            data["KT1"],
+            data["KT2"],
+            data["KT3"],
+            data["KT4"],
+            item_id
+        ]
+        print("updateddddddddddddddddddddddd valuessssssssssssssss", update_values)
+
+        # Execute the update query
+        cursor.execute(update_query, tuple(update_values))
+
+        # Commit the changes to the database
+        conn.commit()
+
+        return {"message": "User details updated successfully", "user": user}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
