@@ -589,3 +589,74 @@ async def update_item(
     finally:
         if conn:
             conn.close()
+
+@app.post("/additems/{company_name}/{item_name}")
+async def add_user(
+        company_name: str,
+        item_name: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Check if the user exists
+        addItem_query = f"SELECT * FROM items WHERE ItemName = %s"
+
+        cursor.execute(addItem_query, (item_name,))
+
+        existItem = cursor.fetchone()
+        # user_dict = dict(zip(cursor.column_names, user))
+        # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
+        print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",existItem)
+        if existItem is not None:
+            return {"message": "User already exists"}
+
+        # Convert username to uppercase
+        item_name_uppercase = item_name.upper()
+
+        # Get JSON data from request body
+        data = await request.json()
+        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
+
+        # Perform the actual insert operation
+        insert_query = f"INSERT INTO items(ItemNo, GroupNo, ItemName, Image, UPrice, Disc, Tax, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(insert_query, ('', '', item_name_uppercase, '', 0.0, 0.0, 0.0, '', '', '', ''))
+
+        # Commit the changes to the database
+        conn.commit()
+
+        return {"message": "User added successfully", "item": item_name_uppercase}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/getItemDetail/{company_name}/{item_name}")
+async def get_item_detail(company_name: str, item_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        additem_query = "SELECT * FROM items WHERE ItemName=%s"
+        cursor.execute(additem_query, (item_name,))
+        additem = cursor.fetchone()
+
+        print("userssssssssssssssssssssssssssssss", additem)
+        # Get column names from cursor.description
+
+        # Convert the tuple to a dictionary
+        getadditem_dict = dict(zip(cursor.column_names, additem))
+
+
+        return getadditem_dict
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
