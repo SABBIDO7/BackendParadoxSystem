@@ -300,7 +300,7 @@ async def get_allitems(company_name: str):
         cursor = conn.cursor()
         allitems_query = (
             "SELECT * FROM items "
-            "WHERE GroupNo != 'MOD'"
+            "WHERE GroupNo != 'MOD' AND Active = 'Y' "
         )
 
         cursor.execute(allitems_query)
@@ -331,7 +331,7 @@ async def get_itemsCategories(company_name: str, category_id: str):
             "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4 "
             "FROM items "
             "INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo "
-            "WHERE groupItem.GroupNo=%s"
+            "WHERE groupItem.GroupNo=%s And items.Active = 'Y'"
         )
 
         cursor.execute(categoryitems_query, (category_id,))
@@ -477,9 +477,9 @@ async def get_allitemswithmod(company_name: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         allitems_query = (
-            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, groupitem.GroupName "
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, groupitem.GroupName, groupItem.GroupNo "
             "FROM items "
-            "JOIN groupitem ON items.GroupNo = groupitem.GroupNo;"
+            "LEFT JOIN groupitem ON items.GroupNo = groupitem.GroupNo;"
         )
 
         cursor.execute(allitems_query)
@@ -491,6 +491,11 @@ async def get_allitemswithmod(company_name: str):
         # Convert the list of tuples to a list of dictionaries
         items_list = [dict(zip(column_names, allitem)) for allitem in allitems]
 
+        # Handle the case where GroupNo is still ''
+        for item in items_list:
+            if item['GroupNo'] == '':
+                item['GroupName'] = ' '  # or any default value you want
+
         print("hol alllllllllll itemsssss", items_list)
 
         return items_list
@@ -499,7 +504,9 @@ async def get_allitemswithmod(company_name: str):
         raise e
     finally:
         # The connection will be automatically closed when it goes out of scope
-        pass
+        if conn:
+            conn.close()
+
 
 @app.get("/groupitems/{company_name}")
 async def get_groupitems(company_name: str):
@@ -557,7 +564,7 @@ async def update_item(
         # Construct the SQL update query
         update_query = (
             "UPDATE items SET ItemNo = %s, GroupNo = %s, ItemName = %s, "
-            "Image = %s, UPrice = %s, Disc = %s, Tax = %s, KT1 = %s, KT2 = %s, KT3 = %s, KT4 = %s "
+            "Image = %s, UPrice = %s, Disc = %s, Tax = %s, KT1 = %s, KT2 = %s, KT3 = %s, KT4 = %s, Active = %s "
             "WHERE ItemNo = %s"
         )
         update_values = [
@@ -572,6 +579,7 @@ async def update_item(
             data["KT2"],
             data["KT3"],
             data["KT4"],
+            data["Active"],
             item_id
         ]
         print("updateddddddddddddddddddddddd valuessssssssssssssss", update_values)
@@ -590,10 +598,10 @@ async def update_item(
         if conn:
             conn.close()
 
-@app.post("/additems/{company_name}/{item_name}")
+@app.post("/additems/{company_name}/{item_no}")
 async def add_user(
         company_name: str,
-        item_name: str,
+        item_no: str,
         request: Request,
 ):
     conn = None
@@ -603,32 +611,29 @@ async def add_user(
         cursor = conn.cursor()
 
         # Check if the user exists
-        addItem_query = f"SELECT * FROM items WHERE ItemName = %s"
+        addItem_query = f"SELECT * FROM items WHERE ItemNo = %s"
 
-        cursor.execute(addItem_query, (item_name,))
+        cursor.execute(addItem_query, (item_no,))
 
         existItem = cursor.fetchone()
         # user_dict = dict(zip(cursor.column_names, user))
         # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
         print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",existItem)
         if existItem is not None:
-            return {"message": "User already exists"}
-
-        # Convert username to uppercase
-        item_name_uppercase = item_name.upper()
+            return {"message": "Item already exists"}
 
         # Get JSON data from request body
         data = await request.json()
         print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
 
         # Perform the actual insert operation
-        insert_query = f"INSERT INTO items(ItemNo, GroupNo, ItemName, Image, UPrice, Disc, Tax, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        cursor.execute(insert_query, ('', '', item_name_uppercase, '', 0.0, 0.0, 0.0, '', '', '', ''))
+        insert_query = f"INSERT INTO items(ItemNo, GroupNo, ItemName, Image, UPrice, Disc, Tax, KT1, KT2, KT3, KT4, Active) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(insert_query, (item_no, '', '', '', 0.0, 0.0, 0.0, '', '', '', '', 'N'))
 
         # Commit the changes to the database
         conn.commit()
 
-        return {"message": "User added successfully", "item": item_name_uppercase}
+        return {"message": "User added successfully", "item": item_no}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
@@ -636,22 +641,26 @@ async def add_user(
         if conn:
             conn.close()
 
-@app.get("/getItemDetail/{company_name}/{item_name}")
-async def get_item_detail(company_name: str, item_name: str):
+@app.get("/getItemDetail/{company_name}/{item_no}")
+async def get_item_detail(company_name: str, item_no: str):
     try:
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
-        additem_query = "SELECT * FROM items WHERE ItemName=%s"
-        cursor.execute(additem_query, (item_name,))
+        additem_query = (
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, groupitem.GroupName, groupitem.GroupNo "
+            "FROM items "
+            "LEFT JOIN groupitem ON items.GroupNo = groupitem.GroupNo "
+            "WHERE items.ItemNo = %s;"
+        )
+        cursor.execute(additem_query, (item_no,))
         additem = cursor.fetchone()
 
-        print("userssssssssssssssssssssssssssssss", additem)
+        print("Add itemsss", additem)
         # Get column names from cursor.description
 
         # Convert the tuple to a dictionary
         getadditem_dict = dict(zip(cursor.column_names, additem))
-
 
         return getadditem_dict
     except HTTPException as e:
@@ -659,4 +668,5 @@ async def get_item_detail(company_name: str, item_name: str):
         raise e
     finally:
         # The connection will be automatically closed when it goes out of scope
-        pass
+        if conn:
+            conn.close()
