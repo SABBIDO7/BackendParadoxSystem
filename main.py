@@ -406,17 +406,17 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
 
                     if result:
                         disc, tax, group_no, kt1, kt2, kt3, kt4 = result
-                    else:
-                        disc, tax, group_no, kt1, kt2, kt3, kt4 = 0, 0, "MOD", 0, 0, 0, 0
+                    # else:
+                    #     disc, tax, group_no, kt1, kt2, kt3, kt4 = 0, 0, "MOD", 0, 0, 0, 0
 
                     # Continue with your INSERT statement using the fetched values
-                    cursor.execute(
-                        "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                        (
-                            SAType, invoice_code, chosenModifier["ItemNo"], "barc", Branch, item["quantity"],
-                            item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4
+                        cursor.execute(
+                            "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                            (
+                                SAType, invoice_code, chosenModifier["ItemNo"], "barc", Branch, item["quantity"],
+                                item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4
+                            )
                         )
-                    )
 
         cursor.execute(
             "UPDATE invnum SET Date = %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
