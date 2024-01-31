@@ -1,9 +1,12 @@
 import json
+import tempfile
 
 from fastapi import FastAPI, HTTPException, Request
 import mysql.connector
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+import subprocess
+import win32print
 
 app = FastAPI()
 
@@ -354,6 +357,49 @@ async def get_itemsCategories(company_name: str, category_id: str):
         pass
 
 
+def generate_receipt_html(data):
+    # Modify this function to generate the HTML content for your receipt
+    print("data forrrr printinggggggggggggggggggggggggggg", data)
+
+    # Use a loop to iterate over items in the data list and generate HTML
+    html_content = ""
+    for item in data:
+        # Include information from the main item on a new line with "x" before the quantity and extra spacing
+        html_content += f"{item['ItemName']}       x{item['quantity']}          ${item['UPrice']:.2f}\n"
+
+        # Check if there are chosenModifiers
+        if "chosenModifiers" in item and item["chosenModifiers"]:
+            # Iterate through chosenModifiers and include them on new lines with additional spacing
+            for modifier in item["chosenModifiers"]:
+                html_content += f"    {modifier['ItemName']}\n"
+
+    return html_content
+
+
+
+
+# def convert_to_pdf(html_content):
+#     # Convert HTML to PDF using pdfkit
+#     pdf_content = pdfkit.from_string(html_content, False)
+#     return pdf_content
+
+def print_html(html_content):
+    # Save the HTML content to a temporary file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as html_file:
+        html_file.write(html_content)
+        temp_html_path = html_file.name
+
+    # Get the specified printer or the default printer
+    printer = win32print.OpenPrinter('MHT-POS58')
+
+
+    # Print the HTML file to the specified/default printer
+    win32print.StartDocPrinter(printer, 1, (temp_html_path, None, "RAW"))
+    win32print.WritePrinter(printer, html_content.encode())
+    win32print.EndDocPrinter(printer)
+    win32print.ClosePrinter(printer)
+
+
 @app.post("/invoiceitem/{company_name}/{Branch}/{SAType}/{Date}/{DSValue}/{Srv}")
 async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: str, DSValue: float, Srv:float,request: Request):
     try:
@@ -370,6 +416,13 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
 
         data = await request.json()
         print("itemssssssssssssssss codeeeeeeeeeeeeee", data)
+        receipt_html = generate_receipt_html(data)
+
+        # Convert HTML to PDF using pdfkit
+        # pdf_content = convert_to_pdf(receipt_html)
+
+        # Print the PDF
+        print_html(receipt_html)
 
         overall_total = 0
 
