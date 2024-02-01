@@ -724,4 +724,4 @@ async def get_item_detail(company_name: str, item_no: str):
         if conn:
             conn.close()
 
-#hee
+#heee
