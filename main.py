@@ -723,3 +723,5 @@ async def get_item_detail(company_name: str, item_no: str):
         # The connection will be automatically closed when it goes out of scope
         if conn:
             conn.close()
+
+#hee
