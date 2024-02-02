@@ -23,6 +23,8 @@ DATABASE_CONFIG = {
     "password": "yara",
     "host": "localhost",
     "port": 3308,
+    "charset": "utf8mb4",
+    "collation": "utf8mb4_unicode_ci"
 }
 
 def get_db(company_name: str):
@@ -361,11 +363,11 @@ def generate_receipt_html(data):
     # Modify this function to generate the HTML content for your receipt
     print("data forrrr printinggggggggggggggggggggggggggg", data)
 
-    # Use a loop to iterate over items in the data list and generate HTML
+    # Use a loop to iterate over items in the data list and generate formatted text
     html_content = ""
     for item in data:
         # Include information from the main item on a new line with "x" before the quantity and extra spacing
-        html_content += f"{item['ItemName']}       x{item['quantity']}          ${item['UPrice']:.2f}\n"
+        html_content += f"{item['ItemName']}{' ' * (20 - len(item['ItemName']))} x{item['quantity']} {' ' * (5 - len(str(item['quantity'])))} ${item['UPrice']:.2f}\n"
 
         # Check if there are chosenModifiers
         if "chosenModifiers" in item and item["chosenModifiers"]:
@@ -375,29 +377,43 @@ def generate_receipt_html(data):
 
     return html_content
 
-
-
-
 # def convert_to_pdf(html_content):
 #     # Convert HTML to PDF using pdfkit
 #     pdf_content = pdfkit.from_string(html_content, False)
 #     return pdf_content
 
+
+import codecs
 def print_html(html_content):
     # Save the HTML content to a temporary file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as html_file:
+    with codecs.open("your_file.html", "w", encoding="utf-8") as html_file:
         html_file.write(html_content)
         temp_html_path = html_file.name
 
     # Get the specified printer or the default printer
-    printer = win32print.OpenPrinter('MHT-POS58')
+    printer = win32print.OpenPrinter('OP')
 
 
     # Print the HTML file to the specified/default printer
     win32print.StartDocPrinter(printer, 1, (temp_html_path, None, "RAW"))
     win32print.WritePrinter(printer, html_content.encode())
+    print("html_content", html_content)
     win32print.EndDocPrinter(printer)
     win32print.ClosePrinter(printer)
+
+
+def get_printer_data(cursor, kt_values):
+    # Generate placeholders based on the length of kt_values
+    placeholders = ', '.join(['%s'] * len(kt_values))
+
+    # Use the placeholders in the query
+    query = f"SELECT KT, Name FROM printers WHERE KT IN ({placeholders});"
+
+    # Execute the query with the list of values
+    cursor.execute(query, kt_values)
+
+    # Fetch all the results
+    return cursor.fetchall()
 
 
 @app.post("/invoiceitem/{company_name}/{Branch}/{SAType}/{Date}/{DSValue}/{Srv}")
@@ -406,41 +422,33 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
-
         # Insert into invoices table
         cursor.execute("INSERT INTO invnum () VALUES ();")
-
         # Get the last inserted invoice code
         invoice_code = cursor.lastrowid
         parsed_date = datetime.strptime(Date, "%d-%m-%Y %H%M%S")
-
         data = await request.json()
         print("itemssssssssssssssss codeeeeeeeeeeeeee", data)
         receipt_html = generate_receipt_html(data)
-
-        # Convert HTML to PDF using pdfkit
-        # pdf_content = convert_to_pdf(receipt_html)
-
-        # Print the PDF
         print_html(receipt_html)
-
         overall_total = 0
-
         for item in data:
-            # Fetch the Disc and Tax values from the items table
-            # cursor.execute("SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;", (item["ItemNo"],))
-            # result = cursor.fetchone()
-            #
-            # if result:
-            #     disc, tax, GroupNo, KT1, KT2, KT3, KT4 = result
-            # else:
-            #     disc, tax = 0, 0
-            # Calculate the total price for the current item
-            total_price = item["UPrice"] * item["quantity"]
+            printer_kt_values = [item["KT1"], item["KT2"], item["KT3"], item["KT4"]]
+            print("printtttttttttttttttttttttttttttttttttttttttt", printer_kt_values)
 
-            # Add the total price to the overall total
-            overall_total += total_price
+            printer_kt_values = [kt for kt in printer_kt_values if kt is not None and kt != '']
 
+            print("ktttt valuesssssss", printer_kt_values)
+
+            printer_data = get_printer_data(cursor, printer_kt_values)
+
+            print("kt nameee mappingggg", printer_data)
+            # Assuming there is only one result for each KT value
+            printer_details = {kt: name for kt, name in printer_data}
+
+            # Add printer details to the item
+            item['printer_details'] = printer_details
+            print("printerr detailsssss", printer_details)
             # Insert the item into the database with the calculated total price
             cursor.execute(
                 "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
@@ -470,21 +478,17 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
                                 item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4
                             )
                         )
-
         cursor.execute(
             "UPDATE invnum SET Date = %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
             (
                 parsed_date, "accno", "cardno", Branch, DSValue, Srv, SAType, invoice_code
             )
         )
-
         #cursor.execute("UPDATE invnum SET total = %s WHERE code = %s;", (overall_total, invoice_code))
-
         conn.commit()
-
-
+        print("the finalllllllllllll data", data)
         # Return the inserted data or any other relevant response
-        return {"message": "Invoice items added successfully"}
+        return {"message": "Invoice items added successfully", "selectedData": data}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
@@ -652,7 +656,7 @@ async def update_item(
             conn.close()
 
 @app.post("/additems/{company_name}/{item_no}")
-async def add_user(
+async def add_item(
         company_name: str,
         item_no: str,
         request: Request,
@@ -686,7 +690,7 @@ async def add_user(
         # Commit the changes to the database
         conn.commit()
 
-        return {"message": "User added successfully", "item": item_no}
+        return {"message": "Item added successfully", "item": item_no}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
