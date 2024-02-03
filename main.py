@@ -333,7 +333,7 @@ async def get_itemsCategories(company_name: str, category_id: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         categoryitems_query = (
-            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4 "
+            "SELECT items.ItemNo, items.GroupNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4 "
             "FROM items "
             "INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo "
             "WHERE groupItem.GroupNo=%s And items.Active = 'Y'"
@@ -358,50 +358,6 @@ async def get_itemsCategories(company_name: str, category_id: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-
-def generate_receipt_html(data):
-    # Modify this function to generate the HTML content for your receipt
-    print("data forrrr printinggggggggggggggggggggggggggg", data)
-
-    # Use a loop to iterate over items in the data list and generate formatted text
-    html_content = ""
-    for item in data:
-        # Include information from the main item on a new line with "x" before the quantity and extra spacing
-        html_content += f"{item['ItemName']}{' ' * (20 - len(item['ItemName']))} x{item['quantity']} {' ' * (5 - len(str(item['quantity'])))} ${item['UPrice']:.2f}\n"
-
-        # Check if there are chosenModifiers
-        if "chosenModifiers" in item and item["chosenModifiers"]:
-            # Iterate through chosenModifiers and include them on new lines with additional spacing
-            for modifier in item["chosenModifiers"]:
-                html_content += f"    {modifier['ItemName']}\n"
-
-    return html_content
-
-# def convert_to_pdf(html_content):
-#     # Convert HTML to PDF using pdfkit
-#     pdf_content = pdfkit.from_string(html_content, False)
-#     return pdf_content
-
-
-import codecs
-def print_html(html_content):
-    # Save the HTML content to a temporary file
-    with codecs.open("your_file.html", "w", encoding="utf-8") as html_file:
-        html_file.write(html_content)
-        temp_html_path = html_file.name
-
-    # Get the specified printer or the default printer
-    printer = win32print.OpenPrinter('OP')
-
-
-    # Print the HTML file to the specified/default printer
-    win32print.StartDocPrinter(printer, 1, (temp_html_path, None, "RAW"))
-    win32print.WritePrinter(printer, html_content.encode())
-    print("html_content", html_content)
-    win32print.EndDocPrinter(printer)
-    win32print.ClosePrinter(printer)
-
-
 def get_printer_data(cursor, kt_values):
     # Generate placeholders based on the length of kt_values
     placeholders = ', '.join(['%s'] * len(kt_values))
@@ -416,8 +372,8 @@ def get_printer_data(cursor, kt_values):
     return cursor.fetchall()
 
 
-@app.post("/invoiceitem/{company_name}/{Branch}/{SAType}/{Date}/{DSValue}/{Srv}")
-async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: str, DSValue: float, Srv:float,request: Request):
+@app.post("/invoiceitem/{company_name}")
+async def post_invoiceitem(company_name: str, request: Request):
     try:
         # Establish the database connection
         conn = get_db(company_name)
@@ -426,13 +382,16 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
         cursor.execute("INSERT INTO invnum () VALUES ();")
         # Get the last inserted invoice code
         invoice_code = cursor.lastrowid
-        parsed_date = datetime.strptime(Date, "%d-%m-%Y %H%M%S")
+
         data = await request.json()
+        print("jsonnnnn", data)
+        parsed_date = datetime.strptime(data["date"], "%d/%m/%Y %H:%M:%S")
+        formatted_date = parsed_date.strftime("%Y/%m/%d %H:%M:%S")
+        print("formatted date", formatted_date)
+
         print("itemssssssssssssssss codeeeeeeeeeeeeee", data)
-        receipt_html = generate_receipt_html(data)
-        print_html(receipt_html)
         overall_total = 0
-        for item in data:
+        for item in data["meals"]:
             printer_kt_values = [item["KT1"], item["KT2"], item["KT3"], item["KT4"]]
             print("printtttttttttttttttttttttttttttttttttttttttt", printer_kt_values)
 
@@ -453,7 +412,7 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
             cursor.execute(
                 "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                 (
-                    SAType, invoice_code, item["ItemNo"], "barc", Branch, item["quantity"], item["UPrice"],
+                    data["invType"] + str(invoice_code), invoice_code, item["ItemNo"], "barc", data["branch"], item["quantity"], item["UPrice"],
                     item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"]
                 )
             )
@@ -474,21 +433,31 @@ async def post_invoiceitem(company_name: str, Branch: str, SAType: str, Date: st
                         cursor.execute(
                             "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                             (
-                                SAType, invoice_code, chosenModifier["ItemNo"], "barc", Branch, item["quantity"],
+                                data["invType"] + str(invoice_code), invoice_code, chosenModifier["ItemNo"], "barc", data["branch"], item["quantity"],
                                 item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4
                             )
                         )
         cursor.execute(
             "UPDATE invnum SET Date = %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
             (
-                parsed_date, "accno", "cardno", Branch, DSValue, Srv, SAType, invoice_code
+                formatted_date, "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["invType"] + str(invoice_code), invoice_code
             )
         )
+        cursor.execute(
+            "SELECT InvType, InvNo, Date, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
+            (invoice_code,))
+        invnum_data = cursor.fetchone()
+        print("invnummmmmmmmmmmmm dataaa", invnum_data)
         #cursor.execute("UPDATE invnum SET total = %s WHERE code = %s;", (overall_total, invoice_code))
         conn.commit()
         print("the finalllllllllllll data", data)
+        invnum_keys = ["InvType", "InvNo", "Date", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
+
+        # Use dict_zip to create a dictionary with keys
+        invnum_dicts = dict(zip(invnum_keys, invnum_data))
+        print("vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv", invnum_dicts)
         # Return the inserted data or any other relevant response
-        return {"message": "Invoice items added successfully", "selectedData": data}
+        return {"message": "Invoice items added successfully", "selectedData": data["meals"], "invoiceDetails": invnum_dicts}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
