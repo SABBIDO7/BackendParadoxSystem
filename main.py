@@ -372,6 +372,8 @@ def get_printer_data(cursor, kt_values):
     return cursor.fetchall()
 
 
+from collections import defaultdict
+
 @app.post("/invoiceitem/{company_name}")
 async def post_invoiceitem(company_name: str, request: Request):
     try:
@@ -391,23 +393,57 @@ async def post_invoiceitem(company_name: str, request: Request):
 
         print("itemssssssssssssssss codeeeeeeeeeeeeee", data)
         overall_total = 0
+
+        # Create a dictionary to store items grouped by kitchen code
+        items_by_kitchen = defaultdict(list)
+
         for item in data["meals"]:
-            printer_kt_values = [item["KT1"], item["KT2"], item["KT3"], item["KT4"]]
+            printer_kt_values = [item[f"KT{i}"] for i in range(1, 5)]
             print("printtttttttttttttttttttttttttttttttttttttttt", printer_kt_values)
 
             printer_kt_values = [kt for kt in printer_kt_values if kt is not None and kt != '']
-
             print("ktttt valuesssssss", printer_kt_values)
 
             printer_data = get_printer_data(cursor, printer_kt_values)
-
             print("kt nameee mappingggg", printer_data)
+
             # Assuming there is only one result for each KT value
-            printer_details = {kt: name for kt, name in printer_data}
+            printer_details = {name: kt for kt, name in printer_data}
+
+            # Group items by kitchen code
+            for name in printer_details:
+                current_item = {
+                    "ItemNo": item["ItemNo"],
+                    "GroupNo": item["GroupNo"],
+                    "ItemName": item["ItemName"],
+                    "Image": item["Image"],
+                    "UPrice": item["UPrice"],
+                    "Disc": item["Disc"],
+                    "Tax": item["Tax"],
+                    "KT1": item["KT1"],
+                    "KT2": item["KT2"],
+                    "KT3": item["KT3"],
+                    "KT4": item["KT4"],
+                    "Active": item["Active"],
+                    "quantity": item["quantity"],
+                    "index": item["index"],
+                    "printer_details": printer_details[name]
+                }
+
+                # Include chosen modifiers
+                if "chosenModifiers" in item and item["chosenModifiers"]:
+                    chosen_modifiers = [
+                        {"ItemNo": modifier["ItemNo"], "ItemName": modifier["ItemName"]}
+                        for modifier in item["chosenModifiers"]
+                    ]
+                    current_item["chosenModifiers"] = chosen_modifiers
+
+                items_by_kitchen[name].append(current_item)
 
             # Add printer details to the item
             item['printer_details'] = printer_details
             print("printerr detailsssss", printer_details)
+
             # Insert the item into the database with the calculated total price
             cursor.execute(
                 "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
@@ -426,10 +462,8 @@ async def post_invoiceitem(company_name: str, request: Request):
 
                     if result:
                         disc, tax, group_no, kt1, kt2, kt3, kt4 = result
-                    # else:
-                    #     disc, tax, group_no, kt1, kt2, kt3, kt4 = 0, 0, "MOD", 0, 0, 0, 0
 
-                    # Continue with your INSERT statement using the fetched values
+                        # Continue with your INSERT statement using the fetched values
                         cursor.execute(
                             "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                             (
@@ -437,27 +471,37 @@ async def post_invoiceitem(company_name: str, request: Request):
                                 item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4
                             )
                         )
+
+        # Update the invnum table
         cursor.execute(
             "UPDATE invnum SET Date = %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
             (
                 formatted_date, "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["invType"] + str(invoice_code), invoice_code
             )
         )
+
+        # Fetch invnum data
         cursor.execute(
             "SELECT InvType, InvNo, Date, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
             (invoice_code,))
         invnum_data = cursor.fetchone()
         print("invnummmmmmmmmmmmm dataaa", invnum_data)
-        #cursor.execute("UPDATE invnum SET total = %s WHERE code = %s;", (overall_total, invoice_code))
+
+        # Commit the transaction
         conn.commit()
+
         print("the finalllllllllllll data", data)
+
+        # Define the keys for invnum
         invnum_keys = ["InvType", "InvNo", "Date", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
 
         # Use dict_zip to create a dictionary with keys
         invnum_dicts = dict(zip(invnum_keys, invnum_data))
         print("vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv", invnum_dicts)
+
         # Return the inserted data or any other relevant response
-        return {"message": "Invoice items added successfully", "selectedData": data["meals"], "invoiceDetails": invnum_dicts}
+        return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
+
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
