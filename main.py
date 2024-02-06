@@ -741,4 +741,166 @@ async def get_item_detail(company_name: str, item_no: str):
         if conn:
             conn.close()
 
-#heee
+@app.get("/clients/{company_name}")
+async def get_clients(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        allclients_query = (
+            "SELECT * FROM clients "
+        )
+
+        cursor.execute(allclients_query)
+        allclients = cursor.fetchall()
+
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        clients_list = [dict(zip(column_names, client)) for client in allclients]
+
+        print("hol alllllllllll itemsssss", clients_list)
+
+        return clients_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.post("/addclients/{company_name}/{user_name}")
+async def add_client(
+        company_name: str,
+        user_name: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Check if the user exists
+        client_query = f"SELECT * FROM clients WHERE AccName = %s"
+
+        cursor.execute(client_query, (user_name,))
+
+        client = cursor.fetchone()
+        # user_dict = dict(zip(cursor.column_names, user))
+        # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
+        print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",client)
+        if client is not None:
+            return {"message": "Client already exists"}
+
+        # Convert username to uppercase
+        client_name_uppercase = user_name.upper()
+
+        # Get JSON data from request body
+        data = await request.json()
+        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
+
+        # Perform the actual insert operation
+        insert_query = f"INSERT INTO clients(AccName, Address, Address2, Tel, Building, Street, Floor, Active, GAddress, Email, VAT, Region, AccPrice, AccGroup, AccDisc, AccRemark) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(insert_query, (client_name_uppercase, '', '', '', '', '', '', '', '', '', '', '', '', '', 0.0, ''))
+
+        # Commit the changes to the database
+        conn.commit()
+
+        return {"message": "User added successfully", "user": client_name_uppercase}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/updateClients/{company_name}/{client_id}")
+async def update_client(
+        company_name: str,
+        item_id: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Check if the user exists
+        user_query = "SELECT * FROM items WHERE AccNo = %s"
+        cursor.execute(user_query, (item_id,))
+        user = cursor.fetchone()
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get JSON data from request body
+        data = await request.json()
+        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
+
+        # Construct the SQL update query
+        update_query = (
+            "UPDATE clients SET AccNo = %s, AccName = %s, Address = %s, "
+            "Address2 = %s, Tel = %s, Building = %s, Street = %s, Floor = %s, Active = %s, GAddress = %s, Email = %s, Region = %s, "
+            "AccPrice = %s, AccGroup = %s, AccDisc = %s, AccRemark = %s   "
+            "WHERE AccNo = %s"
+        )
+        update_values = [
+            data["AccNo"],
+            data["AccName"],
+            data["Address"],
+            data["Address2"],
+            data["Tel"],
+            data["Building"],
+            data["Street"],
+            data["Floor"],
+            data["Active"],
+            data["GAddress"],
+            data["Region"],
+            data["AccPrice"],
+            data["AccGroup"],
+            data["AccDisc"],
+            data["AccRemark"],
+            item_id
+        ]
+        print("updateddddddddddddddddddddddd valuessssssssssssssss", update_values)
+
+        # Execute the update query
+        cursor.execute(update_query, tuple(update_values))
+
+        # Commit the changes to the database
+        conn.commit()
+
+        return {"message": "Client details updated successfully", "user": user}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/getClientDetail/{company_name}/{username}")
+async def get_client_detail(company_name: str, username: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        user_query = "SELECT * FROM clients WHERE AccName=%s"
+        cursor.execute(user_query, (username,))
+        client = cursor.fetchone()
+
+        print("clientsssssssssssssssss", client)
+        # Get column names from cursor.description
+
+        # Convert the tuple to a dictionary
+        user_dict = dict(zip(cursor.column_names, client))
+
+        return user_dict
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
