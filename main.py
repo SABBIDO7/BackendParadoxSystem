@@ -802,8 +802,8 @@ async def add_client(
         print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
 
         # Perform the actual insert operation
-        insert_query = f"INSERT INTO clients(AccName, Address, Address2, Tel, Building, Street, Floor, Active, GAddress, Email, VAT, Region, AccPrice, AccGroup, AccDisc, AccRemark) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        cursor.execute(insert_query, (client_name_uppercase, '', '', '', '', '', '', '', '', '', '', '', '', '', 0.0, ''))
+        initial_insert_query = "INSERT INTO clients(AccName) VALUES (%s)"
+        cursor.execute(initial_insert_query, (client_name_uppercase,))
 
         # Commit the changes to the database
         conn.commit()
@@ -819,7 +819,7 @@ async def add_client(
 @app.post("/updateClients/{company_name}/{client_id}")
 async def update_client(
         company_name: str,
-        item_id: str,
+        client_id: str,
         request: Request,
 ):
     conn = None
@@ -829,8 +829,8 @@ async def update_client(
         cursor = conn.cursor()
 
         # Check if the user exists
-        user_query = "SELECT * FROM items WHERE AccNo = %s"
-        cursor.execute(user_query, (item_id,))
+        user_query = "SELECT * FROM clients WHERE AccNo = %s"
+        cursor.execute(user_query, (client_id,))
         user = cursor.fetchone()
 
         if not user:
@@ -843,7 +843,7 @@ async def update_client(
         # Construct the SQL update query
         update_query = (
             "UPDATE clients SET AccNo = %s, AccName = %s, Address = %s, "
-            "Address2 = %s, Tel = %s, Building = %s, Street = %s, Floor = %s, Active = %s, GAddress = %s, Email = %s, Region = %s, "
+            "Address2 = %s, Tel = %s, Building = %s, Street = %s, Floor = %s, Active = %s, GAddress = %s, Email = %s, VAT = %s, Region = %s, "
             "AccPrice = %s, AccGroup = %s, AccDisc = %s, AccRemark = %s   "
             "WHERE AccNo = %s"
         )
@@ -858,12 +858,14 @@ async def update_client(
             data["Floor"],
             data["Active"],
             data["GAddress"],
+            data["Email"],
+            data["VAT"],
             data["Region"],
             data["AccPrice"],
             data["AccGroup"],
             data["AccDisc"],
             data["AccRemark"],
-            item_id
+            client_id
         ]
         print("updateddddddddddddddddddddddd valuessssssssssssssss", update_values)
 
@@ -881,14 +883,14 @@ async def update_client(
         if conn:
             conn.close()
 
-@app.get("/getClientDetail/{company_name}/{username}")
-async def get_client_detail(company_name: str, username: str):
+@app.get("/getClientDetail/{company_name}/{client_id}")
+async def get_client_detail(company_name: str, client_id: str):
     try:
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
         user_query = "SELECT * FROM clients WHERE AccName=%s"
-        cursor.execute(user_query, (username,))
+        cursor.execute(user_query, (client_id,))
         client = cursor.fetchone()
 
         print("clientsssssssssssssssss", client)
