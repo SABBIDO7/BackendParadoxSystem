@@ -387,6 +387,8 @@ async def post_invoiceitem(company_name: str, request: Request):
 
         data = await request.json()
         print("jsonnnnn", data)
+        if data["meals"] == []:
+            return {"message": "Invoice is empty"}
         parsed_date = datetime.strptime(data["date"], "%d/%m/%Y %H:%M:%S")
         formatted_date = parsed_date.strftime("%Y/%m/%d %H:%M:%S")
         print("formatted date", formatted_date)
