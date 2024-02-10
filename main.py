@@ -621,21 +621,21 @@ async def update_item(
         conn = get_db(company_name)
         cursor = conn.cursor()
 
-        # Check if the user exists
-        user_query = "SELECT * FROM items WHERE ItemNo = %s"
-        cursor.execute(user_query, (item_id,))
-        user = cursor.fetchone()
-
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
         # Get JSON data from request body
         data = await request.json()
-        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
+        print("Received data:", data)
 
-        # Construct the SQL update query
+        # Check if the updated ItemNo already exists
+        existing_item_query = "SELECT ItemNo FROM items WHERE ItemNo = %s"
+        cursor.execute(existing_item_query, (data["ItemNo"],))
+        existing_item = cursor.fetchone()
+        if existing_item is not None:
+            return {"message":"ItemNo already exists. Please choose another ItemNo."}
+
+        # Construct the SQL update query dynamically based on the fields provided in the request
         update_query = (
-            "UPDATE items SET ItemNo = %s, GroupNo = %s, ItemName = %s, "
+            "UPDATE items SET "
+            "ItemNo = %s, GroupNo = %s, ItemName = %s, "
             "Image = %s, UPrice = %s, Disc = %s, Tax = %s, KT1 = %s, KT2 = %s, KT3 = %s, KT4 = %s, Active = %s "
             "WHERE ItemNo = %s"
         )
@@ -654,7 +654,8 @@ async def update_item(
             data["Active"],
             item_id
         ]
-        print("updateddddddddddddddddddddddd valuessssssssssssssss", update_values)
+        print("Update query:", update_query)
+        print("Update values:", update_values)
 
         # Execute the update query
         cursor.execute(update_query, tuple(update_values))
@@ -662,14 +663,13 @@ async def update_item(
         # Commit the changes to the database
         conn.commit()
 
-        return {"message": "User details updated successfully", "user": user}
+        return {"message": "Item details updated successfully"}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
     finally:
         if conn:
             conn.close()
-
 @app.post("/additems/{company_name}/{item_no}")
 async def add_item(
         company_name: str,
