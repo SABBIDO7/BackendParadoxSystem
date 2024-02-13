@@ -609,6 +609,8 @@ async def get_groupitems(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
+from fastapi import HTTPException
+
 @app.post("/updateItems/{company_name}/{item_id}")
 async def update_item(
         company_name: str,
@@ -625,11 +627,11 @@ async def update_item(
         data = await request.json()
         print("Received data:", data)
 
-        # Check if the updated ItemNo already exists
+        # Check if the updated ItemNo already exists and is not the same as the original one
         existing_item_query = "SELECT ItemNo FROM items WHERE ItemNo = %s"
         cursor.execute(existing_item_query, (data["ItemNo"],))
         existing_item = cursor.fetchone()
-        if existing_item is not None:
+        if existing_item is not None and item_id != data["ItemNo"]:
             return {"message":"ItemNo already exists. Please choose another ItemNo."}
 
         # Construct the SQL update query dynamically based on the fields provided in the request
@@ -656,20 +658,27 @@ async def update_item(
         ]
         print("Update query:", update_query)
         print("Update values:", update_values)
-
-        # Execute the update query
-        cursor.execute(update_query, tuple(update_values))
+        # Update the InvNo in the inv table after committing changes to items table
+        update_inv_query = "UPDATE inv SET ItemNo = %s WHERE ItemNo = %s"
+        cursor.execute(update_inv_query, (data["ItemNo"], item_id))
 
         # Commit the changes to the database
         conn.commit()
 
-        return {"message": "Item details updated successfully"}
+        # Execute the update query for items table
+        cursor.execute(update_query, tuple(update_values))
+
+        # Commit the changes to the items table
+        conn.commit()
+        return {"message": "Item details updated successfully", "oldItemNo": item_id, "newItemNo": data["ItemNo"]}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
     finally:
         if conn:
             conn.close()
+
+
 @app.post("/additems/{company_name}/{item_no}")
 async def add_item(
         company_name: str,
