@@ -333,7 +333,7 @@ async def get_itemsCategories(company_name: str, category_id: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         categoryitems_query = (
-            "SELECT items.ItemNo, items.GroupNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4 "
+            "SELECT items.ItemNo, items.GroupNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active "
             "FROM items "
             "INNER JOIN groupItem ON items.GroupNo = groupItem.GroupNo "
             "WHERE groupItem.GroupNo=%s And items.Active = 'Y'"
