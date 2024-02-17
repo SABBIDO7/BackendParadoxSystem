@@ -948,7 +948,7 @@ async def get_allsections(company_name: str):
         pass
 
 @app.post("/addsections/{company_name}")
-async def add_user(
+async def add_section(
         company_name: str,
         request: Request,
 ):
@@ -985,6 +985,134 @@ async def add_user(
         conn.commit()
 
         return {"message": "Section added successfully", }
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/updateSections/{company_name}/{section_id}")
+async def update_section(
+        company_name: str,
+        section_id: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Get JSON data from request body
+        data = await request.json()
+        print("Received data:", data)
+
+        # Check if the updated ItemNo already exists and is not the same as the original one
+        existing_item_query = "SELECT SectionNo FROM section WHERE SectionNo = %s"
+        cursor.execute(existing_item_query, (data["SectionNo"],))
+        existing_section = cursor.fetchone()
+        if existing_section is not None and section_id != data["SectionNo"]:
+            return {"message":"SectionNo already exists. Please choose another SectionNo."}
+
+        # Construct the SQL update query dynamically based on the fields provided in the request
+        update_query = (
+            "UPDATE section SET "
+            "SectionNo = %s, Name = %s "
+            "WHERE SectionNo = %s"
+        )
+        update_values = [
+            data["SectionNo"],
+            data["Name"],
+            section_id
+        ]
+        print("Update query:", update_query)
+        print("Update values:", update_values)
+        # Update the InvNo in the inv table after committing changes to items table
+        update_table_query = "UPDATE tablesettings SET SectionNo = %s WHERE SectionNo = %s"
+        cursor.execute(update_table_query, (data["SectionNo"], section_id))
+
+        # Commit the changes to the database
+        conn.commit()
+
+        # Execute the update query for items table
+        cursor.execute(update_query, tuple(update_values))
+
+        # Commit the changes to the items table
+        conn.commit()
+        return {"message": "Section updated successfully"}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/alltables/{company_name}/{sectionNo}")
+async def get_alltables(company_name: str, sectionNo: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        alltables_query = (
+            "SELECT * FROM tablesettings Where SectionNo = %s"
+        )
+
+        cursor.execute(alltables_query, sectionNo)
+        alltables = cursor.fetchall()
+
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        table_list = [dict(zip(column_names, table)) for table in alltables]
+
+        print("hol alllllllllll sectionsss", table_list)
+
+        return table_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.post("/addtables/{company_name}/{sectionNo}")
+async def add_table(
+        company_name: str,
+        sectionNo: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+
+        # Check if the user exists
+        check_table = f"SELECT * FROM tablesettings WHERE TableNo = %s AND SectionNo = %s"
+
+        cursor.execute(check_table, (data["TableNo"], data["TableWaiter"], sectionNo, data["Active"], data["Description"]))
+
+        table = cursor.fetchone()
+        # user_dict = dict(zip(cursor.column_names, user))
+        # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
+        print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",table)
+        if table is not None:
+            return {"message": "Table already exists"}
+
+        # Get JSON data from request body
+        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
+
+        # Perform the actual insert operation
+        insert_query = f"INSERT INTO tablesettings(TableNo, TableWaiter, SectionNo, Active, Description) VALUES (%s, %s, %s, %s, %s)"
+        cursor.execute(insert_query, (data["SectionNo"], data["TableWaiter"], sectionNo, data["Active"], data["Description"]))
+
+        # Commit the changes to the database
+        conn.commit()
+
+        return {"message": "Table added successfully", }
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
@@ -1047,3 +1175,4 @@ async def update_item(
     finally:
         if conn:
             conn.close()
+
