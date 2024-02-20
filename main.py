@@ -1174,3 +1174,82 @@ async def update_table(
         if conn:
             conn.close()
 
+@app.get("/getInv/{company_name}/{tableNo}/{usedBy}")
+async def getInv(company_name: str, tableNo: str, usedBy: str):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        # Check if the updated ItemNo already exists and is not the same as the original one
+        existing_table_query = "SELECT * FROM inv WHERE TableNo = %s "
+        cursor.execute(existing_table_query, (tableNo,))
+        existing_table = cursor.fetchall()
+        # Get column names from cursor.description if result set exists
+        if existing_table:
+            column_names = [desc[0] for desc in cursor.description]
+            update_usedBy = "Update inv set UsedBy = %s where TableNo = %s "
+            update_values = [usedBy, tableNo]
+            cursor.execute(update_usedBy, tuple(update_values))
+            conn.commit()
+            # Convert the list of tuples to a list of dictionaries
+            inv_list = [dict(zip(column_names, invTable)) for invTable in existing_table]
+            print("invoice of the same table", inv_list)
+            return {"inv_list": inv_list}
+        return {"message": "there are no items"}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/insertInv/{company_name}/{tableNo}/{usedBy}")
+async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Request):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Delete existing rows from inv table where TableNo matches the provided tableNo
+        delete_query = "DELETE FROM inv WHERE TableNo = %s"
+        cursor.execute(delete_query, (tableNo,))
+
+        data = await request.json()
+        meals = data['meals']
+
+        # Insert new rows for each item in data['meals']
+        cursor.execute("INSERT INTO inv () VALUES ()")
+        invoice_code = cursor.lastrowid
+
+        for item in meals:
+            cursor.execute(
+                "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                (
+                    data["invType"] + str(invoice_code), invoice_code, item["ItemNo"], "barc", data["branch"], item["quantity"], item["UPrice"],
+                    item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"], tableNo, "", "p", item["index"])
+            )
+            if "chosenModifiers" in item and item["chosenModifiers"]:
+                for chosenModifier in item["chosenModifiers"]:
+                    # Fetch the Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 values from the items table
+                    cursor.execute("SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;",
+                                   (chosenModifier["ItemNo"],))
+                    result = cursor.fetchone()
+
+                    if result:
+                        disc, tax, group_no, kt1, kt2, kt3, kt4 = result
+                        cursor.execute(
+                            "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4,  UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                            (
+                                data["invType"] + str(invoice_code), invoice_code, chosenModifier["ItemNo"], "barc", data["branch"], item["quantity"],
+                                item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, tableNo, "", "p", item["index"]
+                            )
+                        )
+        # Commit the transaction
+        conn.commit()
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
