@@ -1181,7 +1181,11 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         # Check if the updated ItemNo already exists and is not the same as the original one
-        existing_table_query = "SELECT * FROM inv WHERE TableNo = %s "
+        existing_table_query = """
+                    SELECT *
+                    FROM inv
+                    WHERE TableNo = %s
+                """
         cursor.execute(existing_table_query, (tableNo,))
         existing_table = cursor.fetchall()
         # Get column names from cursor.description if result set exists
@@ -1191,8 +1195,49 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
             update_values = [usedBy, tableNo]
             cursor.execute(update_usedBy, tuple(update_values))
             conn.commit()
-            # Convert the list of tuples to a list of dictionaries
-            inv_list = [dict(zip(column_names, invTable)) for invTable in existing_table]
+            cursor.execute(f" Select `Index` from inv where TableNo= '{tableNo}' Group By `Index` ")
+            extract_indexes = cursor.fetchall()
+            print("indexesssssss", extract_indexes)
+            inv_list = []
+            for e_index_row  in extract_indexes:
+                e_index = e_index_row[0]
+                print("eee indexxxxxx", e_index)
+                query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.TableNo = '{tableNo}' and inv.GroupNo != 'MOD' "
+                print("blaaaaaaaaaaaaaaaaa", query)
+                cursor.execute(query)
+                princ_items = cursor.fetchone()
+                column_names = [desc[0] for desc in cursor.description]
+                princ_item = dict(zip(column_names, princ_items))
+                print("princ itemmm", princ_item)
+                query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.TableNo = '{tableNo}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
+                print("blaaaaaaaaaaaaaaaaa", query2)
+                cursor.execute(query2)
+                item_mods = cursor.fetchall()
+                column_names = [desc[0] for desc in cursor.description]
+                item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
+                print("item_mods", item_mod)
+
+                item = {
+                        "ItemNo": princ_item["ItemNo"],
+                        "ItemName": princ_item["ItemName"],
+                        "Printed": princ_item["Printed"],
+                        "UPrice": princ_item["UPrice"],
+                        "Disc": princ_item["Disc"],
+                        "Tax": princ_item["Tax"],
+                        "quantity": princ_item["Qty"],
+                        "KT1": princ_item["KT1"],
+                        "KT2": princ_item["KT2"],
+                        "KT3": princ_item["KT3"],
+                        "KT4": princ_item["KT4"],
+                        "index": princ_item["Index"],
+                        "GroupNo": princ_item["GroupNo"],
+                        "chosenModifiers": [
+                            {"ItemNo": itemod["ItemNo"], "ItemName": itemod["ItemName"]}
+                            for itemod in item_mod
+                        ]
+                    }
+                inv_list.append(item)
+
             print("invoice of the same table", inv_list)
             return {"inv_list": inv_list}
         return {"message": "there are no items"}
@@ -1211,6 +1256,9 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
         cursor = conn.cursor()
 
         # Delete existing rows from inv table where TableNo matches the provided tableNo
+        cursor.execute(f" Select InvNo from inv where tableNo = '{tableNo}'")
+        inv_num = cursor.fetchone()
+        cursor.execute(f"Delete from invnum where InvNo = '{inv_num}'")
         delete_query = "DELETE FROM inv WHERE TableNo = %s"
         cursor.execute(delete_query, (tableNo,))
 
@@ -1218,7 +1266,7 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
         meals = data['meals']
 
         # Insert new rows for each item in data['meals']
-        cursor.execute("INSERT INTO inv () VALUES ()")
+        cursor.execute("INSERT INTO invnum () VALUES ()")
         invoice_code = cursor.lastrowid
 
         for item in meals:
@@ -1238,7 +1286,7 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
                     if result:
                         disc, tax, group_no, kt1, kt2, kt3, kt4 = result
                         cursor.execute(
-                            "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4,  UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                            "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                             (
                                 data["invType"] + str(invoice_code), invoice_code, chosenModifier["ItemNo"], "barc", data["branch"], item["quantity"],
                                 item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, tableNo, "", "p", item["index"]
