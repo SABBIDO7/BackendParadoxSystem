@@ -1184,13 +1184,16 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
         existing_table_query = """
                     SELECT *
                     FROM inv
-                    WHERE TableNo = %s
+                    WHERE TableNo = %s LIMIT 1
                 """
         cursor.execute(existing_table_query, (tableNo,))
-        existing_table = cursor.fetchall()
+        existing_table = cursor.fetchone()
         # Get column names from cursor.description if result set exists
         if existing_table:
             column_names = [desc[0] for desc in cursor.description]
+            invNo = dict(zip(column_names, existing_table))
+            inv_No = invNo["InvNo"]
+            print("ppppppppppppppppp", invNo["InvNo"])
             update_usedBy = "Update inv set UsedBy = %s where TableNo = %s "
             update_values = [usedBy, tableNo]
             cursor.execute(update_usedBy, tuple(update_values))
@@ -1239,7 +1242,7 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                 inv_list.append(item)
 
             print("invoice of the same table", inv_list)
-            return {"inv_list": inv_list}
+            return {"inv_list": inv_list, "invNo": inv_No, "tableNo": tableNo}
         return {"message": "there are no items"}
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1255,19 +1258,54 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
         conn = get_db(company_name)
         cursor = conn.cursor()
 
-        # Delete existing rows from inv table where TableNo matches the provided tableNo
-        cursor.execute(f" Select InvNo from inv where tableNo = '{tableNo}'")
-        inv_num = cursor.fetchone()
-        cursor.execute(f"Delete from invnum where InvNo = '{inv_num}'")
-        delete_query = "DELETE FROM inv WHERE TableNo = %s"
-        cursor.execute(delete_query, (tableNo,))
-
+        cursor.execute(f" Select InvNo from inv where tableNo = '{tableNo}'  LIMIT 1")
+        inv_row = cursor.fetchone()
         data = await request.json()
         meals = data['meals']
+        parsed_date = datetime.strptime(data["date"], "%d/%m/%Y %H:%M:%S")
+        if(inv_row):
+            inv_num = inv_row[0]
+            print("invvvv numberrrr", inv_num)
+            if (inv_num is not None):
+                cursor.execute(f"DELETE FROM inv WHERE InvNo = '{inv_num}'")
+                for item in meals:
+                    cursor.execute(
+                        "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                        (
+                            data["invType"], inv_num, item["ItemNo"], "barc", data["branch"],
+                            item["quantity"], item["UPrice"],
+                            item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"],
+                            item["KT4"],
+                            tableNo, "", "p", item["index"])
+                    )
+                    if "chosenModifiers" in item and item["chosenModifiers"]:
+                        for chosenModifier in item["chosenModifiers"]:
+                            # Fetch the Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 values from the items table
+                            cursor.execute(
+                                "SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;",
+                                (chosenModifier["ItemNo"],))
+                            result = cursor.fetchone()
 
+                            if result:
+                                disc, tax, group_no, kt1, kt2, kt3, kt4 = result
+                                cursor.execute(
+                                    "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                                    (
+                                        data["invType"], inv_num, chosenModifier["ItemNo"], "barc",
+                                        data["branch"], item["quantity"],
+                                        item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, tableNo, "", "p",
+                                        item["index"]
+                                    )
+                                )
+                # Commit the transaction
+                conn.commit()
+                return {"invNo": inv_num}
         # Insert new rows for each item in data['meals']
         cursor.execute("INSERT INTO invnum () VALUES ()")
         invoice_code = cursor.lastrowid
+        cursor.execute(
+            f"UPDATE invnum SET InvType = '{data['invType']}', Date = '{parsed_date}', AccountNo = 'accno', CardNo = 'cardno', Branch = '{data['branch']}', Disc = '{data['discValue']}', Srv = '{data['srv']}' WHERE InvNo = '{invoice_code}'"
+        )
 
         for item in meals:
             cursor.execute(
@@ -1288,12 +1326,14 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
                         cursor.execute(
                             "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                             (
-                                data["invType"] + str(invoice_code), invoice_code, chosenModifier["ItemNo"], "barc", data["branch"], item["quantity"],
+                                data["invType"], invoice_code, chosenModifier["ItemNo"], "barc", data["branch"], item["quantity"],
                                 item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, tableNo, "", "p", item["index"]
                             )
                         )
         # Commit the transaction
         conn.commit()
+        return {"invNo": invoice_code}
+
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
