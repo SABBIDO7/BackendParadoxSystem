@@ -908,7 +908,6 @@ async def update_section(
 @app.get("/alltables/{company_name}/{sectionNo}")
 async def get_alltables(company_name: str, sectionNo: str):
     try:
-        print("feyt tfatish")
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
