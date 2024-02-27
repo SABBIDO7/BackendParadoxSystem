@@ -160,20 +160,12 @@ async def update_user(
 
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-
-        # Get JSON data from request body
         data = await request.json()
-        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
-
-        # Convert username to uppercase if it exists in the data
         if 'username' in data:
             data['username'] = data['username'].upper()
-            print("ana bl usernameeeeeeeeeeeeeeee", data['username'])
-
         # Construct the SQL update query
         update_query = f"UPDATE users SET {', '.join(f'{field} = %s' for field in data)} WHERE id = %s"
         update_values = list(data.values())
-        print("updateddddddddddddddddddddddd valuessssssssssssssss", update_values)
         update_values.append(user_id)
 
         # Execute the update query
@@ -210,9 +202,6 @@ async def get_company(company_name: str):
 
         # Convert the list of tuples to a list of dictionaries
         users_list = [dict(zip(column_names, user)) for user in users]
-
-        print("userssssssssssssssssssssssssssssss", users_list)
-
         return users_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -240,20 +229,12 @@ async def add_user(
         cursor.execute(user_query, (user_name,))
 
         user = cursor.fetchone()
-        # user_dict = dict(zip(cursor.column_names, user))
-        # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
-        print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",user)
         if user is not None:
             return {"message": "User already exists"}
-
-        # Convert username to uppercase
         user_name_uppercase = user_name.upper()
 
         # Get JSON data from request body
         data = await request.json()
-        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
-
-        # Perform the actual insert operation
         insert_query = f"INSERT INTO users(username, password, user_control, email, sales, sales_return, purshase, purshase_return, orders, trans, items, chart, statement) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         cursor.execute(insert_query, (user_name_uppercase, '', '', '', '', '', '', '', '', '', '', '', ''))
 
@@ -286,9 +267,6 @@ async def get_categories(company_name: str):
 
         # Convert the list of tuples to a list of dictionaries
         categories_list = [dict(zip(column_names, category)) for category in categories]
-
-        print("hol l categoriesssssss", categories_list)
-
         return categories_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -316,9 +294,6 @@ async def get_allitems(company_name: str):
 
         # Convert the list of tuples to a list of dictionaries
         items_list = [dict(zip(column_names, allitem)) for allitem in allitems]
-
-        print("hol alllllllllll itemsssss", items_list)
-
         return items_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -347,9 +322,6 @@ async def get_itemsCategories(company_name: str, category_id: str):
 
         # Convert the list of tuples to a list of dictionaries
         categories_list = [dict(zip(column_names, categoryitem)) for categoryitem in categoriesitems]
-
-        print("hol l itemssssssssssssss in each categories", categories_list)
-
         return categories_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -386,32 +358,20 @@ async def post_invoiceitem(company_name: str, request: Request):
         invoice_code = cursor.lastrowid
 
         data = await request.json()
-        print("jsonnnnn", data)
         if data["meals"] == []:
             return {"message": "Invoice is empty"}
         parsed_date = datetime.strptime(data["date"], "%d/%m/%Y %H:%M:%S")
         formatted_date = parsed_date.strftime("%Y/%m/%d %H:%M:%S")
-        print("formatted date", formatted_date)
-
-        print("itemssssssssssssssss codeeeeeeeeeeeeee", data)
         overall_total = 0
-
         # Create a dictionary to store items grouped by kitchen code
         items_by_kitchen = defaultdict(list)
 
         for item in data["meals"]:
             printer_kt_values = [item[f"KT{i}"] for i in range(1, 5)]
-            print("printtttttttttttttttttttttttttttttttttttttttt", printer_kt_values)
-
             printer_kt_values = [kt for kt in printer_kt_values if kt is not None and kt != '']
-            print("ktttt valuesssssss", printer_kt_values)
-
             printer_data = get_printer_data(cursor, printer_kt_values)
-            print("kt nameee mappingggg", printer_data)
-
             # Assuming there is only one result for each KT value
             printer_details = {name: kt for kt, name in printer_data}
-
             # Group items by kitchen code
             for name in printer_details:
                 current_item = {
@@ -444,9 +404,6 @@ async def post_invoiceitem(company_name: str, request: Request):
 
             # Add printer details to the item
             item['printer_details'] = printer_details
-            print("printerr detailsssss", printer_details)
-
-            # Insert the item into the database with the calculated total price
             cursor.execute(
                 "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                 (
@@ -487,21 +444,9 @@ async def post_invoiceitem(company_name: str, request: Request):
             "SELECT InvType, InvNo, Date, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
             (invoice_code,))
         invnum_data = cursor.fetchone()
-        print("invnummmmmmmmmmmmm dataaa", invnum_data)
-
-        # Commit the transaction
         conn.commit()
-
-        print("the finalllllllllllll data", data)
-
-        # Define the keys for invnum
         invnum_keys = ["InvType", "InvNo", "Date", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
-
-        # Use dict_zip to create a dictionary with keys
         invnum_dicts = dict(zip(invnum_keys, invnum_data))
-        print("vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv", invnum_dicts)
-
-        # Return the inserted data or any other relevant response
         return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
 
     except HTTPException as e:
@@ -531,9 +476,6 @@ async def get_modifiers(company_name: str):
 
         # Convert the list of tuples to a list of dictionaries
         modifiers_list = [dict(zip(column_names, modifyitem)) for modifyitem in modifiersitems]
-
-        print("hol l itemssssssssssssss in each categories", modifiers_list)
-
         return modifiers_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -567,9 +509,6 @@ async def get_allitemswithmod(company_name: str):
         for item in items_list:
             if item['GroupNo'] == '':
                 item['GroupName'] = ' '  # or any default value you want
-
-        print("hol alllllllllll itemsssss", items_list)
-
         return items_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -592,15 +531,8 @@ async def get_groupitems(company_name: str):
 
         cursor.execute(allgroups_query)
         allgroups = cursor.fetchall()
-
-        # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
-
-        # Convert the list of tuples to a list of dictionaries
         grps_list = [dict(zip(column_names, allgrp)) for allgrp in allgroups]
-
-        print("hol alllllllllll itemsssss", grps_list)
-
         return grps_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -656,9 +588,6 @@ async def update_item(
             data["Active"],
             item_id
         ]
-        print("Update query:", update_query)
-        print("Update values:", update_values)
-        # Update the InvNo in the inv table after committing changes to items table
         update_inv_query = "UPDATE inv SET ItemNo = %s WHERE ItemNo = %s"
         cursor.execute(update_inv_query, (data["ItemNo"], item_id))
 
@@ -667,8 +596,6 @@ async def update_item(
 
         # Execute the update query for items table
         cursor.execute(update_query, tuple(update_values))
-
-        # Commit the changes to the items table
         conn.commit()
         return {"message": "Item details updated successfully", "oldItemNo": item_id, "newItemNo": data["ItemNo"]}
     except HTTPException as e:
@@ -697,23 +624,12 @@ async def add_item(
         cursor.execute(addItem_query, (item_no,))
 
         existItem = cursor.fetchone()
-        # user_dict = dict(zip(cursor.column_names, user))
-        # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
-        print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",existItem)
         if existItem is not None:
             return {"message": "Item already exists"}
-
-        # Get JSON data from request body
         data = await request.json()
-        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
-
-        # Perform the actual insert operation
         insert_query = f"INSERT INTO items(ItemNo, GroupNo, ItemName, Image, UPrice, Disc, Tax, KT1, KT2, KT3, KT4, Active) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         cursor.execute(insert_query, (item_no, '', '', '', 0.0, 0.0, 0.0, '', '', '', '', 'N'))
-
-        # Commit the changes to the database
         conn.commit()
-
         return {"message": "Item added successfully", "item": item_no}
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -736,10 +652,6 @@ async def get_item_detail(company_name: str, item_no: str):
         )
         cursor.execute(additem_query, (item_no,))
         additem = cursor.fetchone()
-
-        print("Add itemsss", additem)
-        # Get column names from cursor.description
-
         # Convert the tuple to a dictionary
         getadditem_dict = dict(zip(cursor.column_names, additem))
 
@@ -770,9 +682,6 @@ async def get_clients(company_name: str):
 
         # Convert the list of tuples to a list of dictionaries
         clients_list = [dict(zip(column_names, client)) for client in allclients]
-
-        print("hol alllllllllll itemsssss", clients_list)
-
         return clients_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -799,20 +708,10 @@ async def add_client(
         cursor.execute(client_query, (user_name,))
 
         client = cursor.fetchone()
-        # user_dict = dict(zip(cursor.column_names, user))
-        # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
-        print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",client)
         if client is not None:
             return {"message": "Client already exists"}
-
-        # Convert username to uppercase
         client_name_uppercase = user_name.upper()
-
-        # Get JSON data from request body
         data = await request.json()
-        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
-
-        # Perform the actual insert operation
         initial_insert_query = "INSERT INTO clients(AccName) VALUES (%s)"
         cursor.execute(initial_insert_query, (client_name_uppercase,))
 
@@ -846,12 +745,7 @@ async def update_client(
 
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-
-        # Get JSON data from request body
         data = await request.json()
-        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
-
-        # Construct the SQL update query
         update_query = (
             "UPDATE clients SET AccNo = %s, AccName = %s, Address = %s, "
             "Address2 = %s, Tel = %s, Building = %s, Street = %s, Floor = %s, Active = %s, GAddress = %s, Email = %s, VAT = %s, Region = %s, "
@@ -878,8 +772,6 @@ async def update_client(
             data["AccRemark"],
             client_id
         ]
-        print("updateddddddddddddddddddddddd valuessssssssssssssss", update_values)
-
         # Execute the update query
         cursor.execute(update_query, tuple(update_values))
 
@@ -903,11 +795,6 @@ async def get_client_detail(company_name: str, client_id: str):
         user_query = "SELECT * FROM clients WHERE AccName=%s"
         cursor.execute(user_query, (client_id,))
         client = cursor.fetchone()
-
-        print("clientsssssssssssssssss", client)
-        # Get column names from cursor.description
-
-        # Convert the tuple to a dictionary
         user_dict = dict(zip(cursor.column_names, client))
 
         return user_dict
@@ -930,15 +817,8 @@ async def get_allsections(company_name: str):
 
         cursor.execute(allitems_query)
         allsections = cursor.fetchall()
-
-        # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
-
-        # Convert the list of tuples to a list of dictionaries
         section_list = [dict(zip(column_names, section)) for section in allsections]
-
-        print("hol alllllllllll sectionsss", section_list)
-
         return section_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -961,27 +841,14 @@ async def add_section(
 
         # Check if the user exists
         check_section = f"SELECT * FROM section WHERE SectionNo = %s"
-
         cursor.execute(check_section, (data["SectionNo"],))
-
         section = cursor.fetchone()
-        # user_dict = dict(zip(cursor.column_names, user))
-        # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
-        print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",section)
         if section is not None:
             return {"message": "Section already exists"}
-
-        # Convert username to uppercase
         section_uppercase = data["Name"].upper()
-
-        # Get JSON data from request body
-        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
-
         # Perform the actual insert operation
         insert_query = f"INSERT INTO section(SectionNo, Name) VALUES (%s, %s)"
         cursor.execute(insert_query, (data["SectionNo"],section_uppercase, ))
-
-        # Commit the changes to the database
         conn.commit()
 
         return {"message": "Section added successfully", }
@@ -1006,8 +873,6 @@ async def update_section(
 
         # Get JSON data from request body
         data = await request.json()
-        print("Received data:", data)
-
         # Check if the updated ItemNo already exists and is not the same as the original one
         existing_item_query = "SELECT SectionNo FROM section WHERE SectionNo = %s"
         cursor.execute(existing_item_query, (data["SectionNo"],))
@@ -1026,19 +891,11 @@ async def update_section(
             data["Name"],
             section_id
         ]
-        print("Update query:", update_query)
-        print("Update values:", update_values)
         # Update the InvNo in the inv table after committing changes to items table
         update_table_query = "UPDATE tablesettings SET SectionNo = %s WHERE SectionNo = %s"
         cursor.execute(update_table_query, (data["SectionNo"], section_id))
-
-        # Commit the changes to the database
         conn.commit()
-
-        # Execute the update query for items table
         cursor.execute(update_query, tuple(update_values))
-
-        # Commit the changes to the items table
         conn.commit()
         return {"message": "Section updated successfully"}
     except HTTPException as e:
@@ -1051,6 +908,7 @@ async def update_section(
 @app.get("/alltables/{company_name}/{sectionNo}")
 async def get_alltables(company_name: str, sectionNo: str):
     try:
+        print("feyt tfatish")
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
@@ -1060,15 +918,8 @@ async def get_alltables(company_name: str, sectionNo: str):
 
         cursor.execute(alltables_query, (sectionNo,))
         alltables = cursor.fetchall()
-
-        # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
-
-        # Convert the list of tuples to a list of dictionaries
         table_list = [dict(zip(column_names, table)) for table in alltables]
-
-        print("hol alllllllllll sectionsss", table_list)
-
         return table_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1096,22 +947,14 @@ async def add_table(
         cursor.execute(check_table, (data["TableNo"],))
 
         table = cursor.fetchone()
-        # user_dict = dict(zip(cursor.column_names, user))
-        # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", user_dict)
-        print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",table)
         if table is not None:
             return {"message": "Table already exists"}
-
-        # Get JSON data from request body
-        print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
-
         # Perform the actual insert operation
         insert_query = f"INSERT INTO tablesettings(TableNo, TableWaiter, SectionNo, Active, Description) VALUES (%s, %s, %s, %s, %s)"
         cursor.execute(insert_query, (data["TableNo"], data["TableWaiter"], sectionNo, data["Active"], data["Description"]))
 
         # Commit the changes to the database
         conn.commit()
-
         return {"message": "Table added successfully", }
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1132,19 +975,13 @@ async def update_table(
         # Check if the user exists in the given company
         conn = get_db(company_name)
         cursor = conn.cursor()
-
-        # Get JSON data from request body
         data = await request.json()
-        print("Received data:", data)
-
         # Check if the updated ItemNo already exists and is not the same as the original one
         existing_table_query = "SELECT TableNo FROM tablesettings WHERE TableNo = %s "
         cursor.execute(existing_table_query, (data["TableNo"],))
         existing_table = cursor.fetchone()
         if existing_table is not None and tableNo != data["TableNo"]:
             return {"message":"Table No already exists. Please choose another Table No."}
-
-        # Construct the SQL update query dynamically based on the fields provided in the request
         update_query = (
             "UPDATE tablesettings SET "
             "TableNo = %s, TableWaiter = %s, SectionNo = %s, Active = %s, Description = %s "
@@ -1158,13 +995,8 @@ async def update_table(
             data["Description"],
             tableNo, sectionNo
         ]
-        print("Update query:", update_query)
-        print("Update values:", update_values)
-
         # Execute the update query for items table
         cursor.execute(update_query, tuple(update_values))
-
-        # Commit the changes to the items table
         conn.commit()
         return {"message": "Table updated successfully"}
     except HTTPException as e:
@@ -1193,33 +1025,27 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
             column_names = [desc[0] for desc in cursor.description]
             invNo = dict(zip(column_names, existing_table))
             inv_No = invNo["InvNo"]
-            print("ppppppppppppppppp", invNo["InvNo"])
             update_usedBy = "Update inv set UsedBy = %s where TableNo = %s "
             update_values = [usedBy, tableNo]
             cursor.execute(update_usedBy, tuple(update_values))
             conn.commit()
+            cursor.execute(f"Update tablesettings set UsedBy = '{usedBy}' where TableNo = '{tableNo}'")
+            conn.commit()
             cursor.execute(f" Select `Index` from inv where TableNo= '{tableNo}' Group By `Index` ")
             extract_indexes = cursor.fetchall()
-            print("indexesssssss", extract_indexes)
             inv_list = []
-            for e_index_row  in extract_indexes:
+            for e_index_row in extract_indexes:
                 e_index = e_index_row[0]
-                print("eee indexxxxxx", e_index)
                 query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.TableNo = '{tableNo}' and inv.GroupNo != 'MOD' "
-                print("blaaaaaaaaaaaaaaaaa", query)
                 cursor.execute(query)
                 princ_items = cursor.fetchone()
                 column_names = [desc[0] for desc in cursor.description]
                 princ_item = dict(zip(column_names, princ_items))
-                print("princ itemmm", princ_item)
                 query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.TableNo = '{tableNo}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
-                print("blaaaaaaaaaaaaaaaaa", query2)
                 cursor.execute(query2)
                 item_mods = cursor.fetchall()
                 column_names = [desc[0] for desc in cursor.description]
                 item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
-                print("item_mods", item_mod)
-
                 item = {
                         "ItemNo": princ_item["ItemNo"],
                         "ItemName": princ_item["ItemName"],
@@ -1241,7 +1067,6 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                     }
                 inv_list.append(item)
 
-            print("invoice of the same table", inv_list)
             return {"inv_list": inv_list, "invNo": inv_No, "tableNo": tableNo}
         return {"message": "there are no items"}
     except HTTPException as e:
@@ -1265,7 +1090,6 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
         parsed_date = datetime.strptime(data["date"], "%d/%m/%Y %H:%M:%S")
         if(inv_row):
             inv_num = inv_row[0]
-            print("invvvv numberrrr", inv_num)
             if (inv_num is not None):
                 cursor.execute(f"DELETE FROM inv WHERE InvNo = '{inv_num}'")
                 for item in meals:
@@ -1298,42 +1122,12 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
                                     )
                                 )
                 # Commit the transaction
+                cursor.execute(
+                    f"UPDATE invnum SET InvType = '{data['invType']}', Date = '{parsed_date}', AccountNo = 'accno', CardNo = 'cardno', Branch = '{data['branch']}', Disc = '{data['discValue']}', Srv = '{data['srv']}' WHERE InvNo = '{inv_num}'"
+                )
+                cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{tableNo}'")
                 conn.commit()
                 return {"invNo": inv_num}
-        # Insert new rows for each item in data['meals']
-        cursor.execute("INSERT INTO invnum () VALUES ()")
-        invoice_code = cursor.lastrowid
-        cursor.execute(
-            f"UPDATE invnum SET InvType = '{data['invType']}', Date = '{parsed_date}', AccountNo = 'accno', CardNo = 'cardno', Branch = '{data['branch']}', Disc = '{data['discValue']}', Srv = '{data['srv']}' WHERE InvNo = '{invoice_code}'"
-        )
-
-        for item in meals:
-            cursor.execute(
-                "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                (
-                    data["invType"] + str(invoice_code), invoice_code, item["ItemNo"], "barc", data["branch"], item["quantity"], item["UPrice"],
-                    item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"], tableNo, "", "p", item["index"])
-            )
-            if "chosenModifiers" in item and item["chosenModifiers"]:
-                for chosenModifier in item["chosenModifiers"]:
-                    # Fetch the Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 values from the items table
-                    cursor.execute("SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;",
-                                   (chosenModifier["ItemNo"],))
-                    result = cursor.fetchone()
-
-                    if result:
-                        disc, tax, group_no, kt1, kt2, kt3, kt4 = result
-                        cursor.execute(
-                            "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                            (
-                                data["invType"], invoice_code, chosenModifier["ItemNo"], "barc", data["branch"], item["quantity"],
-                                item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, tableNo, "", "p", item["index"]
-                            )
-                        )
-        # Commit the transaction
-        conn.commit()
-        return {"invNo": invoice_code}
-
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
@@ -1341,3 +1135,55 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
         if conn:
             conn.close()
 
+@app.get("/chooseAccess/{company_name}/{tableNo}/{loggedUser}")
+async def chooseAccess(company_name: str, tableNo: str, loggedUser: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        tableNo_query = (
+            f"SELECT * FROM inv Where TableNo = '{tableNo}' Limit 1 "
+        )
+
+        cursor.execute(tableNo_query)
+        tableNo_fetch = cursor.fetchone()
+        if(tableNo_fetch):
+            column_names = [desc[0] for desc in cursor.description]
+            row_dict = dict(zip(column_names, tableNo_fetch))
+            print("nameeeeeeeeeeeeeeeees", row_dict["UsedBy"])
+            print("loggeeeeeeeeeeeee", loggedUser)
+            if row_dict["UsedBy"] != "" and row_dict["UsedBy"] != loggedUser:
+                return {"message": "you can't access this table right now", "usedBy": row_dict["UsedBy"]}
+            elif row_dict["UsedBy"] != "" and row_dict["UsedBy"] == loggedUser:
+                return {"message": "you can access this table", "usedBy": row_dict["UsedBy"]}
+        return {"message": "you can access this table", "usedBy": ""}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.post("/openTable/{company_name}/{tableNo}/{loggedUser}")
+async def openTable(company_name: str, tableNo: str, loggedUser: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM inv WHERE TableNo = '{tableNo}' LIMIT 1")
+        existTable = cursor.fetchone()
+        if(existTable is None):
+            cursor.execute("Insert Into invnum () Values (); ")
+            invoice_code = cursor.lastrowid
+            cursor.execute(
+                f"Insert into inv(InvNo, TableNo, UsedBy) values ('{invoice_code}', '{tableNo}', '{loggedUser}')")
+            cursor.execute(
+                f"UPDATE tablesettings SET UsedBy = '{loggedUser}' WHERE TableNo = '{tableNo}'"
+            )
+            conn.commit()
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
