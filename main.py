@@ -1033,19 +1033,21 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
             cursor.execute(f" Select `Index` from inv where TableNo= '{tableNo}' Group By `Index` ")
             extract_indexes = cursor.fetchall()
             inv_list = []
-            for e_index_row in extract_indexes:
-                e_index = e_index_row[0]
-                query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.TableNo = '{tableNo}' and inv.GroupNo != 'MOD' "
-                cursor.execute(query)
-                princ_items = cursor.fetchone()
-                column_names = [desc[0] for desc in cursor.description]
-                princ_item = dict(zip(column_names, princ_items))
-                query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.TableNo = '{tableNo}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
-                cursor.execute(query2)
-                item_mods = cursor.fetchall()
-                column_names = [desc[0] for desc in cursor.description]
-                item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
-                item = {
+            if extract_indexes and extract_indexes[0][0] is not None:
+
+                for e_index_row in extract_indexes:
+                    e_index = e_index_row[0]
+                    query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.TableNo = '{tableNo}' and inv.GroupNo != 'MOD' "
+                    cursor.execute(query)
+                    princ_items = cursor.fetchone()
+                    column_names = [desc[0] for desc in cursor.description]
+                    princ_item = dict(zip(column_names, princ_items))
+                    query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.TableNo = '{tableNo}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
+                    cursor.execute(query2)
+                    item_mods = cursor.fetchall()
+                    column_names = [desc[0] for desc in cursor.description]
+                    item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
+                    item = {
                         "ItemNo": princ_item["ItemNo"],
                         "ItemName": princ_item["ItemName"],
                         "Printed": princ_item["Printed"],
@@ -1064,9 +1066,9 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                             for itemod in item_mod
                         ]
                     }
-                inv_list.append(item)
+                    inv_list.append(item)
 
-            return {"inv_list": inv_list, "invNo": inv_No, "tableNo": tableNo}
+                return {"inv_list": inv_list, "invNo": inv_No, "tableNo": tableNo}
         return {"message": "there are no items"}
     except HTTPException as e:
         print("Error details:", e.detail)
