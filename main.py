@@ -819,7 +819,8 @@ async def get_allsections(company_name: str):
         allsections = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         section_list = [dict(zip(column_names, section)) for section in allsections]
-        return section_list
+        print("lennnnnnnnnnn",len(section_list))
+        return {"section_list": section_list}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
@@ -911,11 +912,12 @@ async def get_alltables(company_name: str, sectionNo: str):
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
-        alltables_query = (
-            "SELECT * FROM tablesettings Where SectionNo = %s"
-        )
-
-        cursor.execute(alltables_query, (sectionNo,))
+        if sectionNo:
+            cursor.execute(
+                f"SELECT * FROM tablesettings Where SectionNo = '{sectionNo}'"
+            )
+        else:
+            cursor.execute("Select * from tablesettings")
         alltables = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         table_list = [dict(zip(column_names, table)) for table in alltables]
@@ -1187,4 +1189,36 @@ async def openTable(company_name: str, tableNo: str, loggedUser: str):
         raise e
     finally:
         # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.get("/resetUsedBy/{company_name}/{tableNo}")
+async def resetUsedBy(company_name: str, tableNo: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"Update inv set UsedBy = '' WHERE TableNo= '{tableNo}'")
+        cursor.execute(f"Update tablesettings set UsedBy = '' WHERE TableNo='{tableNo}'")
+        conn.commit()
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+
+@app.get("/getOneSection/{company_name}")
+async def getOneSection(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute("Select SectionNo from section")
+        secNo = cursor.fetchone()
+        print("secccc", secNo[0])
+        conn.commit()
+        return {"sectionNo": secNo[0]}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
         pass
