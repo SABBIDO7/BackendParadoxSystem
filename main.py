@@ -1030,6 +1030,9 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
             update_values = [usedBy, tableNo]
             cursor.execute(update_usedBy, tuple(update_values))
             conn.commit()
+            cursor.execute(f"Select Disc, Srv from invnum where InvNo ='{inv_No}'")
+            result = cursor.fetchone()
+            disc, srv = result
             cursor.execute(f"Update tablesettings set UsedBy = '{usedBy}' where TableNo = '{tableNo}'")
             conn.commit()
             cursor.execute(f" Select `Index` from inv where TableNo= '{tableNo}' Group By `Index` ")
@@ -1070,7 +1073,7 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                     }
                     inv_list.append(item)
 
-                return {"inv_list": inv_list, "invNo": inv_No, "tableNo": tableNo}
+                return {"inv_list": inv_list, "invNo": inv_No, "disc": disc, "srv": srv }
         return {"message": "there are no items"}
     except HTTPException as e:
         print("Error details:", e.detail)
