@@ -1,5 +1,6 @@
 import json
 import tempfile
+from itertools import groupby
 
 from fastapi import FastAPI, HTTPException, Request
 import mysql.connector
@@ -330,19 +331,6 @@ async def get_itemsCategories(company_name: str, category_id: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-def get_printer_data(cursor, kt_values):
-    # Generate placeholders based on the length of kt_values
-    placeholders = ', '.join(['%s'] * len(kt_values))
-
-    # Use the placeholders in the query
-    query = f"SELECT KT, Name FROM printers WHERE KT IN ({placeholders});"
-
-    # Execute the query with the list of values
-    cursor.execute(query, kt_values)
-
-    # Fetch all the results
-    return cursor.fetchall()
-
 
 from collections import defaultdict
 
@@ -364,46 +352,26 @@ async def post_invoiceitem(company_name: str, request: Request):
         formatted_date = parsed_date.strftime("%Y/%m/%d %H:%M:%S")
         overall_total = 0
         # Create a dictionary to store items grouped by kitchen code
+        # items_by_kitchen = defaultdict(list)
+        # Specify keys for grouping
+        cursor.execute(f"Select KT, Name from printers")
+        printer_data = cursor.fetchall()
+        printer_dic = {key: name for key, name in printer_data}
+        # Specify keys for grouping
+        keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
+
+        # Group meals by printer names
         items_by_kitchen = defaultdict(list)
+        for meal in data["meals"]:
+            printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
+            # Remove dashes from printer names
+            printer_names = [name.replace('-', '') for name in printer_names]
+            non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
+            if non_empty_printer_names:  # Check if there are non-empty printer names
+                for kitchen in non_empty_printer_names:
+                    items_by_kitchen[kitchen].append(meal)
 
         for item in data["meals"]:
-            printer_kt_values = [item[f"KT{i}"] for i in range(1, 5)]
-            printer_kt_values = [kt for kt in printer_kt_values if kt is not None and kt != '']
-            printer_data = get_printer_data(cursor, printer_kt_values)
-            # Assuming there is only one result for each KT value
-            printer_details = {name: kt for kt, name in printer_data}
-            # Group items by kitchen code
-            for name in printer_details:
-                current_item = {
-                    "ItemNo": item["ItemNo"],
-                    "GroupNo": item["GroupNo"],
-                    "ItemName": item["ItemName"],
-                    "Image": item["Image"],
-                    "UPrice": item["UPrice"],
-                    "Disc": item["Disc"],
-                    "Tax": item["Tax"],
-                    "KT1": item["KT1"],
-                    "KT2": item["KT2"],
-                    "KT3": item["KT3"],
-                    "KT4": item["KT4"],
-                    "Active": item["Active"],
-                    "quantity": item["quantity"],
-                    "index": item["index"],
-                    "printer_details": printer_details[name]
-                }
-
-                # Include chosen modifiers
-                if "chosenModifiers" in item and item["chosenModifiers"]:
-                    chosen_modifiers = [
-                        {"ItemNo": modifier["ItemNo"], "ItemName": modifier["ItemName"]}
-                        for modifier in item["chosenModifiers"]
-                    ]
-                    current_item["chosenModifiers"] = chosen_modifiers
-
-                items_by_kitchen[name].append(current_item)
-
-            # Add printer details to the item
-            item['printer_details'] = printer_details
             cursor.execute(
                 "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                 (
@@ -1220,6 +1188,36 @@ async def getOneSection(company_name: str):
         print("secccc", secNo[0])
         conn.commit()
         return {"sectionNo": secNo[0]}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+
+@app.post("/groupkitchen/{company_name}/{tableNo}/{loggedin}")
+async def groupkitchen(company_name: str, request: Request, tableNo: str, loggedin: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        cursor.execute(f"Select KT, Name from printers")
+        printer_data = cursor.fetchall()
+        printer_dic = {key: name for key, name in printer_data}
+        # Specify keys for grouping
+        keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
+
+        # Group meals by printer names
+        unprintedMeals = defaultdict(list)
+        for meal in data:
+            printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
+            # Remove dashes from printer names
+            printer_names = [name.replace('-', '') for name in printer_names]
+            non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
+            if non_empty_printer_names:  # Check if there are non-empty printer names
+                for kitchen in non_empty_printer_names:
+                    unprintedMeals[kitchen].append(meal)
+        return {"unprintedMeals": unprintedMeals}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
