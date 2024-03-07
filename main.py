@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 from itertools import groupby
 
 from fastapi import FastAPI, HTTPException, Request
@@ -1162,20 +1163,35 @@ async def openTable(company_name: str, tableNo: str, loggedUser: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/resetUsedBy/{company_name}/{tableNo}")
-async def resetUsedBy(company_name: str, tableNo: str):
+@app.get("/resetUsedBy/{company_name}/{InvNo}")
+async def resetUsedBy(company_name: str, InvNo: str):
     try:
         # Establish the database connection
         conn = get_db(company_name)
+        conn2 = get_db(company_name)
         cursor = conn.cursor()
-        cursor.execute(f"Update inv set UsedBy = '' WHERE TableNo= '{tableNo}'")
-        cursor.execute(f"Update tablesettings set UsedBy = '' WHERE TableNo='{tableNo}'")
+        cursor2 = conn2.cursor()
+
+        # Update inv table
+        cursor.execute(f"UPDATE inv SET UsedBy = '' WHERE InvNo = '{InvNo}'")
         conn.commit()
+
+        # Fetch TableNo from inv table
+        cursor.execute(f"SELECT TableNo FROM inv WHERE InvNo = '{InvNo}'")
+        tableNo_row = cursor.fetchone()
+
+        if tableNo_row:  # Check if a row was fetched
+            tableNo = tableNo_row[0]  # Access the TableNo value
+            print("vbbbbbbbbbbbbbbbbbbbbbb", tableNo)
+            cursor2.execute(f"UPDATE tablesettings SET UsedBy='' WHERE TableNo = '{tableNo}'")
+            conn2.commit()
+
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
     finally:
         pass
+
 
 @app.get("/getOneSection/{company_name}")
 async def getOneSection(company_name: str):
