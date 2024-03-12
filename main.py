@@ -185,6 +185,8 @@ async def update_user(
             conn.close()
 
 
+import json
+
 @app.get("/company/{company_name}")
 async def get_company(company_name: str):
     try:
@@ -193,24 +195,58 @@ async def get_company(company_name: str):
         cursor = conn.cursor()
         user_query = (
             f"SELECT * FROM company "
-
         )
 
         cursor.execute(user_query)
-        users = cursor.fetchall()
+        comp = cursor.fetchone()
 
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
 
         # Convert the list of tuples to a list of dictionaries
-        users_list = [dict(zip(column_names, user)) for user in users]
-        return users_list
+        compOb = dict(zip(column_names, comp))
+        print("companyssssssssssssssss", compOb)
+
+        return compOb
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
+
+
+
+from fastapi import HTTPException, Request
+
+
+@app.post("/updateCompany/{company_name}")
+async def updateCompany(company_name: str, request: Request):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        sql_query = (
+            f"UPDATE company SET Name = '{data['Name']}', "
+            f"Phone = '{data['Phone']}', "
+            f"Street = '{data['Street']}', "
+            f"Branch = '{data['Branch']}', "
+            f"City = '{data['City']}', "
+            f"Currency = '{data['Currency']}', "
+            f"Name2 = '{data['Name2']}', "
+            f"`Start Time` = '{data['Start Time']}', "
+            f"`End Time` = '{data['End Time']}' "
+        )
+        cursor.execute(sql_query)
+        conn.commit()
+        return {"message": "Company info successfully updated"}
+    except Exception as e:
+        print("Error details:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        # Close the cursor and connection
+        cursor.close()
+        conn.close()
 
 
 @app.post("/addusers/{company_name}/{user_name}")
@@ -349,9 +385,6 @@ async def post_invoiceitem(company_name: str, request: Request):
         data = await request.json()
         if data["meals"] == []:
             return {"message": "Invoice is empty"}
-        parsed_date = datetime.strptime(data["date"], "%d/%m/%Y %H:%M:%S")
-        formatted_date = parsed_date.strftime("%Y/%m/%d %H:%M:%S")
-        overall_total = 0
         # Create a dictionary to store items grouped by kitchen code
         # items_by_kitchen = defaultdict(list)
         # Specify keys for grouping
@@ -402,19 +435,19 @@ async def post_invoiceitem(company_name: str, request: Request):
 
         # Update the invnum table
         cursor.execute(
-            "UPDATE invnum SET Date = %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
+            "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
             (
-                formatted_date, "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["invType"] + str(invoice_code), invoice_code
+                data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["invType"] + str(invoice_code), invoice_code
             )
         )
 
         # Fetch invnum data
         cursor.execute(
-            "SELECT InvType, InvNo, Date, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
+            "SELECT InvType, InvNo, Date, Time, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
             (invoice_code,))
         invnum_data = cursor.fetchone()
         conn.commit()
-        invnum_keys = ["InvType", "InvNo", "Date", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
+        invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
         invnum_dicts = dict(zip(invnum_keys, invnum_data))
         return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
 
@@ -1062,7 +1095,6 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
         inv_row = cursor.fetchone()
         data = await request.json()
         meals = data['meals']
-        parsed_date = datetime.strptime(data["date"], "%d/%m/%Y %H:%M:%S")
         if(inv_row):
             inv_num = inv_row[0]
             if (inv_num is not None):
@@ -1098,7 +1130,7 @@ async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Reque
                                 )
                 # Commit the transaction
                 cursor.execute(
-                    f"UPDATE invnum SET InvType = '{data['invType']}', Date = '{parsed_date}', AccountNo = 'accno', CardNo = 'cardno', Branch = '{data['branch']}', Disc = '{data['discValue']}', Srv = '{data['srv']}' WHERE InvNo = '{inv_num}'"
+                    f"UPDATE invnum SET InvType = '{data['invType']}', Date = '{data["date"]}', Time='{data["time"]}', AccountNo = 'accno', CardNo = 'cardno', Branch = '{data['branch']}', Disc = '{data['discValue']}', Srv = '{data['srv']}' WHERE InvNo = '{inv_num}'"
                 )
                 cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{tableNo}'")
                 conn.commit()
@@ -1238,4 +1270,28 @@ async def groupkitchen(company_name: str, request: Request, tableNo: str, logged
         print("Error details:", e.detail)
         raise e
     finally:
+        pass
+
+@app.get("/getAllInv/{company_name}")
+async def getAllInv(company_name: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT inv.*, items.ItemName, groupitem.GroupName
+            FROM inv
+            INNER JOIN groupitem ON inv.GroupNo = groupitem.GroupNo
+            INNER JOIN items ON inv.ItemNo = items.ItemNo
+        """)
+
+        all_inv = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
+        print("iiiiiiiiiiiiiii", inv_list)
+        return inv_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
         pass
