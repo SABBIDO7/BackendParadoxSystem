@@ -226,6 +226,7 @@ async def updateCompany(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
+        print(data)
         sql_query = (
             f"UPDATE company SET Name = '{data['Name']}', "
             f"Phone = '{data['Phone']}', "
@@ -234,11 +235,11 @@ async def updateCompany(company_name: str, request: Request):
             f"City = '{data['City']}', "
             f"Currency = '{data['Currency']}', "
             f"Name2 = '{data['Name2']}', "
-            f"`Start Time` = '{data['Start Time']}', "
-            f"`End Time` = '{data['End Time']}' "
+            f"`EndTime` = '{data['EndTime']}' "
         )
         cursor.execute(sql_query)
         conn.commit()
+        print("endddddddddddddddddd",data["EndTime"])
         return {"message": "Company info successfully updated"}
     except Exception as e:
         print("Error details:", str(e))
@@ -371,8 +372,8 @@ async def get_itemsCategories(company_name: str, category_id: str):
 
 from collections import defaultdict
 
-@app.post("/invoiceitem/{company_name}")
-async def post_invoiceitem(company_name: str, request: Request):
+@app.post("/invoiceitem/{company_name}/{invNo}")
+async def post_invoiceitem(company_name: str, request: Request, invNo: str):
     try:
         # Establish the database connection
         conn = get_db(company_name)
@@ -1294,4 +1295,21 @@ async def getAllInv(company_name: str):
         raise e
     finally:
         # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.get("/getCompTime/{company_name}")
+async def getCompTime(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute("Select EndTime from company")
+        compTime = cursor.fetchone()
+        print("secccc", compTime[0])
+        conn.commit()
+        return {"compTime": compTime[0]}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
         pass
