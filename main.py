@@ -372,85 +372,127 @@ async def get_itemsCategories(company_name: str, category_id: str):
 
 from collections import defaultdict
 
-@app.post("/invoiceitem/{company_name}/{invNo}")
-async def post_invoiceitem(company_name: str, request: Request, invNo: str):
+@app.post("/invoiceitem/{company_name}")
+async def post_invoiceitem(company_name: str, request: Request):
     try:
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
-        # Insert into invoices table
-        cursor.execute("INSERT INTO invnum () VALUES ();")
-        # Get the last inserted invoice code
-        invoice_code = cursor.lastrowid
-
+        conn2 = get_db(company_name)
+        cursor2 = conn2.cursor()
         data = await request.json()
+        items_by_kitchen = defaultdict(list)
+
         if data["meals"] == []:
             return {"message": "Invoice is empty"}
         # Create a dictionary to store items grouped by kitchen code
         # items_by_kitchen = defaultdict(list)
         # Specify keys for grouping
-        cursor.execute(f"Select KT, Name from printers")
-        printer_data = cursor.fetchall()
-        printer_dic = {key: name for key, name in printer_data}
-        # Specify keys for grouping
-        keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
-
-        # Group meals by printer names
-        items_by_kitchen = defaultdict(list)
-        for meal in data["meals"]:
-            printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
-            # Remove dashes from printer names
-            printer_names = [name.replace('-', '') for name in printer_names]
-            non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
-            if non_empty_printer_names:  # Check if there are non-empty printer names
-                for kitchen in non_empty_printer_names:
-                    items_by_kitchen[kitchen].append(meal)
-
-        for item in data["meals"]:
+        print("mmmmmmmmmmmmmmmmmmmmmm",data["closeTClicked"])
+        if data["closeTClicked"]:
+            cursor2.execute(f"Select TableNo from inv Where InvNo = '{data['message']}' ")
+            tableno = cursor2.fetchone()  # Assuming you want to fetch one row
+            tableno = tableno[0]
+            print("tttttttttttttttttt", tableno)
+            cursor.execute(f"Update tablesettings set UsedBy='' Where TableNo= '{tableno}'")
+            cursor.execute(f"Update inv set TableNo='', UsedBy='' Where InvNo='{data['message']}'")
+            # Update the invnum table
             cursor.execute(
-                "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
                 (
-                    data["invType"] + str(invoice_code), invoice_code, item["ItemNo"], "barc", data["branch"], item["quantity"], item["UPrice"],
-                    item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"]
+                    data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"],
+                    data["invType"] + data["invType"], data['message']
                 )
             )
 
-            if "chosenModifiers" in item and item["chosenModifiers"]:
-                for chosenModifier in item["chosenModifiers"]:
-                    # Fetch the Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 values from the items table
-                    cursor.execute("SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;",
-                                   (chosenModifier["ItemNo"],))
-                    result = cursor.fetchone()
+            # Fetch invnum data
+            cursor.execute(
+                "SELECT InvType, InvNo, Date, Time, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
+                (data['message'],))
+            invnum_data = cursor.fetchone()
+            conn.commit()
+            invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
+            invnum_dicts = dict(zip(invnum_keys, invnum_data))
+            return {"invoiceDetails": invnum_dicts}
 
-                    if result:
-                        disc, tax, group_no, kt1, kt2, kt3, kt4 = result
+        else:
+            cursor.execute(f"Select KT, Name from printers")
+            printer_data = cursor.fetchall()
+            printer_dic = {key: name for key, name in printer_data}
+            # Specify keys for grouping
+            keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
+            print("dmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm", data["tableNo"])
+            inv_num = ''
+            invoice_code = 1
+            if data["tableNo"]:
+                cursor.execute(f" Select InvNo from inv where tableNo = '{data["tableNo"]}'  LIMIT 1")
+                inv_row = cursor.fetchone()
+                inv_num = inv_row[0]
+                cursor.execute(f"DELETE FROM inv WHERE InvNo = '{inv_num}'")
+            else:
+                # Insert into invoices table
+                cursor.execute("INSERT INTO invnum () VALUES ();")
+                # Get the last inserted invoice code
+                invoice_code = cursor.lastrowid
+            # Group meals by printer names
+            for meal in data["unsentMeals"]:
+                printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
+                # Remove dashes from printer names
+                printer_names = [name.replace('-', '') for name in printer_names]
+                non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
+                if non_empty_printer_names:  # Check if there are non-empty printer names
+                    for kitchen in non_empty_printer_names:
+                        items_by_kitchen[kitchen].append(meal)
 
-                        # Continue with your INSERT statement using the fetched values
-                        cursor.execute(
-                            "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                            (
-                                data["invType"] + str(invoice_code), invoice_code, chosenModifier["ItemNo"], "barc", data["branch"], item["quantity"],
-                                item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4
+            for item in data["meals"]:
+                cursor.execute(
+                    "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                    (
+                        data["invType"], inv_num if "tableNo" in data else invoice_code, item["ItemNo"], "barc", data["branch"],
+                        item["quantity"], item["UPrice"],
+                        item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"], data["tableNo"] if data["tableNo"] else '', '', 'p' if data["tableNo"] else '', item["index"],
+                    )
+                )
+
+                if "chosenModifiers" in item and item["chosenModifiers"]:
+                    for chosenModifier in item["chosenModifiers"]:
+                        # Fetch the Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 values from the items table
+                        cursor.execute("SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;",
+                                       (chosenModifier["ItemNo"],))
+                        result = cursor.fetchone()
+
+                        if result:
+                            disc, tax, group_no, kt1, kt2, kt3, kt4 = result
+
+                            # Continue with your INSERT statement using the fetched values
+                            cursor.execute(
+                                "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                                (
+                                    data["invType"], inv_num if "tableNo" in data else invoice_code, chosenModifier["ItemNo"], "barc",
+                                    data["branch"], item["quantity"],
+                                    item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, data["tableNo"] if data["tableNo"] else '', '', 'p' if data["tableNo"] else '', item["index"],
+                                )
                             )
-                        )
-
-        # Update the invnum table
-        cursor.execute(
-            "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
-            (
-                data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["invType"] + str(invoice_code), invoice_code
+            # Update the invnum table
+            cursor.execute(
+                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
+                (
+                    data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["invType"] + str(invoice_code), inv_num if "tableNo" in data else invoice_code,
+                )
             )
-        )
 
-        # Fetch invnum data
-        cursor.execute(
-            "SELECT InvType, InvNo, Date, Time, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
-            (invoice_code,))
-        invnum_data = cursor.fetchone()
-        conn.commit()
-        invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
-        invnum_dicts = dict(zip(invnum_keys, invnum_data))
-        return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
+            # Fetch invnum data
+            cursor.execute(
+                "SELECT InvType, InvNo, Date, Time, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
+                (inv_num if "tableNo" in data else invoice_code,))
+            invnum_data = cursor.fetchone()
+            conn.commit()
+            invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
+            invnum_dicts = dict(zip(invnum_keys, invnum_data))
+            if data["tableNo"]:
+                cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{data["tableNo"]}'")
+                conn.commit()
+            return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
 
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1085,63 +1127,63 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
         if conn:
             conn.close()
 
-@app.post("/insertInv/{company_name}/{tableNo}/{usedBy}")
-async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Request):
-    conn = None
-    try:
-        conn = get_db(company_name)
-        cursor = conn.cursor()
-
-        cursor.execute(f" Select InvNo from inv where tableNo = '{tableNo}'  LIMIT 1")
-        inv_row = cursor.fetchone()
-        data = await request.json()
-        meals = data['meals']
-        if(inv_row):
-            inv_num = inv_row[0]
-            if (inv_num is not None):
-                cursor.execute(f"DELETE FROM inv WHERE InvNo = '{inv_num}'")
-                for item in meals:
-                    cursor.execute(
-                        "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                        (
-                            data["invType"], inv_num, item["ItemNo"], "barc", data["branch"],
-                            item["quantity"], item["UPrice"],
-                            item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"],
-                            item["KT4"],
-                            tableNo, "", "p", item["index"])
-                    )
-                    if "chosenModifiers" in item and item["chosenModifiers"]:
-                        for chosenModifier in item["chosenModifiers"]:
-                            # Fetch the Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 values from the items table
-                            cursor.execute(
-                                "SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;",
-                                (chosenModifier["ItemNo"],))
-                            result = cursor.fetchone()
-
-                            if result:
-                                disc, tax, group_no, kt1, kt2, kt3, kt4 = result
-                                cursor.execute(
-                                    "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                                    (
-                                        data["invType"], inv_num, chosenModifier["ItemNo"], "barc",
-                                        data["branch"], item["quantity"],
-                                        item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, tableNo, "", "p",
-                                        item["index"]
-                                    )
-                                )
-                # Commit the transaction
-                cursor.execute(
-                    f"UPDATE invnum SET InvType = '{data['invType']}', Date = '{data["date"]}', Time='{data["time"]}', AccountNo = 'accno', CardNo = 'cardno', Branch = '{data['branch']}', Disc = '{data['discValue']}', Srv = '{data['srv']}' WHERE InvNo = '{inv_num}'"
-                )
-                cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{tableNo}'")
-                conn.commit()
-                return {"invNo": inv_num}
-    except HTTPException as e:
-        print("Error details:", e.detail)
-        raise e
-    finally:
-        if conn:
-            conn.close()
+# @app.post("/insertInv/{company_name}/{tableNo}/{usedBy}")
+# async def insertInv(company_name: str, tableNo: str, usedBy: str, request: Request):
+#     conn = None
+#     try:
+#         conn = get_db(company_name)
+#         cursor = conn.cursor()
+#
+#         cursor.execute(f" Select InvNo from inv where tableNo = '{tableNo}'  LIMIT 1")
+#         inv_row = cursor.fetchone()
+#         data = await request.json()
+#         meals = data['meals']
+#         if(inv_row):
+#             inv_num = inv_row[0]
+#             if (inv_num is not None):
+#                 cursor.execute(f"DELETE FROM inv WHERE InvNo = '{inv_num}'")
+#                 for item in meals:
+#                     cursor.execute(
+#                         "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+#                         (
+#                             data["invType"], inv_num, item["ItemNo"], "barc", data["branch"],
+#                             item["quantity"], item["UPrice"],
+#                             item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"],
+#                             item["KT4"],
+#                             tableNo, "", "p", item["index"])
+#                     )
+#                     if "chosenModifiers" in item and item["chosenModifiers"]:
+#                         for chosenModifier in item["chosenModifiers"]:
+#                             # Fetch the Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 values from the items table
+#                             cursor.execute(
+#                                 "SELECT Disc, Tax, GroupNo, KT1, KT2, KT3, KT4 FROM items WHERE ItemNo = %s;",
+#                                 (chosenModifier["ItemNo"],))
+#                             result = cursor.fetchone()
+#
+#                             if result:
+#                                 disc, tax, group_no, kt1, kt2, kt3, kt4 = result
+#                                 cursor.execute(
+#                                     "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+#                                     (
+#                                         data["invType"], inv_num, chosenModifier["ItemNo"], "barc",
+#                                         data["branch"], item["quantity"],
+#                                         item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, tableNo, "", "p",
+#                                         item["index"]
+#                                     )
+#                                 )
+#                 # Commit the transaction
+#                 cursor.execute(
+#                     f"UPDATE invnum SET InvType = '{data['invType']}', Date = '{data["date"]}', Time='{data["time"]}', AccountNo = 'accno', CardNo = 'cardno', Branch = '{data['branch']}', Disc = '{data['discValue']}', Srv = '{data['srv']}' WHERE InvNo = '{inv_num}'"
+#                 )
+#                 cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{tableNo}'")
+#                 conn.commit()
+#                 return {"invNo": inv_num}
+#     except HTTPException as e:
+#         print("Error details:", e.detail)
+#         raise e
+#     finally:
+#         if conn:
+#             conn.close()
 
 @app.get("/chooseAccess/{company_name}/{tableNo}/{loggedUser}")
 async def chooseAccess(company_name: str, tableNo: str, loggedUser: str):
@@ -1180,6 +1222,7 @@ async def openTable(company_name: str, tableNo: str, loggedUser: str):
         cursor = conn.cursor()
         cursor.execute(f"SELECT * FROM inv WHERE TableNo = '{tableNo}' LIMIT 1")
         existTable = cursor.fetchone()
+        print("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwww", existTable)
         if(existTable is None):
             cursor.execute("Insert Into invnum () Values (); ")
             invoice_code = cursor.lastrowid
@@ -1243,35 +1286,35 @@ async def getOneSection(company_name: str):
     finally:
         pass
 
-@app.post("/groupkitchen/{company_name}/{tableNo}/{loggedin}")
-async def groupkitchen(company_name: str, request: Request, tableNo: str, loggedin: str):
-    try:
-        # Establish the database connection
-        conn = get_db(company_name)
-        cursor = conn.cursor()
-        data = await request.json()
-        cursor.execute(f"Select KT, Name from printers")
-        printer_data = cursor.fetchall()
-        printer_dic = {key: name for key, name in printer_data}
-        # Specify keys for grouping
-        keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
-
-        # Group meals by printer names
-        unprintedMeals = defaultdict(list)
-        for meal in data:
-            printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
-            # Remove dashes from printer names
-            printer_names = [name.replace('-', '') for name in printer_names]
-            non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
-            if non_empty_printer_names:  # Check if there are non-empty printer names
-                for kitchen in non_empty_printer_names:
-                    unprintedMeals[kitchen].append(meal)
-        return {"unprintedMeals": unprintedMeals}
-    except HTTPException as e:
-        print("Error details:", e.detail)
-        raise e
-    finally:
-        pass
+# @app.post("/groupkitchen/{company_name}/{tableNo}/{loggedin}")
+# async def groupkitchen(company_name: str, request: Request, tableNo: str, loggedin: str):
+#     try:
+#         # Establish the database connection
+#         conn = get_db(company_name)
+#         cursor = conn.cursor()
+#         data = await request.json()
+#         cursor.execute(f"Select KT, Name from printers")
+#         printer_data = cursor.fetchall()
+#         printer_dic = {key: name for key, name in printer_data}
+#         # Specify keys for grouping
+#         keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
+#
+#         # Group meals by printer names
+#         unprintedMeals = defaultdict(list)
+#         for meal in data:
+#             printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
+#             # Remove dashes from printer names
+#             printer_names = [name.replace('-', '') for name in printer_names]
+#             non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
+#             if non_empty_printer_names:  # Check if there are non-empty printer names
+#                 for kitchen in non_empty_printer_names:
+#                     unprintedMeals[kitchen].append(meal)
+#         return {"unprintedMeals": unprintedMeals}
+#     except HTTPException as e:
+#         print("Error details:", e.detail)
+#         raise e
+#     finally:
+#         pass
 
 @app.get("/getAllInv/{company_name}")
 async def getAllInv(company_name: str):
