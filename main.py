@@ -398,20 +398,20 @@ async def post_invoiceitem(company_name: str, request: Request):
             cursor.execute(f"Update inv set TableNo='', UsedBy='' Where InvNo='{data['message']}'")
             # Update the invnum table
             cursor.execute(
-                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
+                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s, RealDate=%s, RealTime=%s WHERE InvNo = %s;",
                 (
                     data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"],
-                    data["invType"] + data["invType"], data['message']
+                    data["invType"] + data["invType"], data["realDate"], data["time"], data['message']
                 )
             )
 
             # Fetch invnum data
             cursor.execute(
-                "SELECT InvType, InvNo, Date, Time, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
+                "SELECT InvType, InvNo, Date, Time, AccountNo, CardNo, Branch, Disc, Srv, RealDate, RealTime FROM invnum WHERE InvNo = %s;",
                 (data['message'],))
             invnum_data = cursor.fetchone()
             conn.commit()
-            invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
+            invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv", "RealDate", "RealTime"]
             invnum_dicts = dict(zip(invnum_keys, invnum_data))
             return {"invoiceDetails": invnum_dicts}
 
@@ -434,6 +434,8 @@ async def post_invoiceitem(company_name: str, request: Request):
                 cursor.execute("INSERT INTO invnum () VALUES ();")
                 # Get the last inserted invoice code
                 invoice_code = cursor.lastrowid
+            if len(data["unsentMeals"]) == 0:
+                return {"message": "The meals already sent to kitchen"}
             # Group meals by printer names
             for meal in data["unsentMeals"]:
                 printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
@@ -448,7 +450,7 @@ async def post_invoiceitem(company_name: str, request: Request):
                 cursor.execute(
                     "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                     (
-                        data["invType"], inv_num if "tableNo" in data else invoice_code, item["ItemNo"], "barc", data["branch"],
+                        data["invType"], inv_num if data["tableNo"] else invoice_code, item["ItemNo"], "barc", data["branch"],
                         item["quantity"], item["UPrice"],
                         item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"], data["tableNo"] if data["tableNo"] else '', '', 'p' if data["tableNo"] else '', item["index"],
                     )
@@ -468,26 +470,27 @@ async def post_invoiceitem(company_name: str, request: Request):
                             cursor.execute(
                                 "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                                 (
-                                    data["invType"], inv_num if "tableNo" in data else invoice_code, chosenModifier["ItemNo"], "barc",
+                                    data["invType"], inv_num if data["tableNo"] else invoice_code, chosenModifier["ItemNo"], "barc",
                                     data["branch"], item["quantity"],
                                     item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, data["tableNo"] if data["tableNo"] else '', '', 'p' if data["tableNo"] else '', item["index"],
                                 )
                             )
             # Update the invnum table
             cursor.execute(
-                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s WHERE InvNo = %s;",
+                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, RealDate=%s, RealTime=%s, InvType=%s WHERE InvNo = %s;",
                 (
-                    data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["invType"] + str(invoice_code), inv_num if "tableNo" in data else invoice_code,
+                    data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], data["invType"], inv_num if data["tableNo"] else invoice_code,
                 )
             )
 
             # Fetch invnum data
             cursor.execute(
-                "SELECT InvType, InvNo, Date, Time, AccountNo, CardNo, Branch, Disc, Srv FROM invnum WHERE InvNo = %s;",
-                (inv_num if "tableNo" in data else invoice_code,))
+                "SELECT InvType, InvNo, Date, Time, AccountNo, CardNo, Branch, Disc, Srv, RealDate, RealTime FROM invnum WHERE InvNo = %s;",
+                (inv_num if data["tableNo"] else invoice_code,))
             invnum_data = cursor.fetchone()
             conn.commit()
-            invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv"]
+            print("hhhhhhhhhhhhhhhhhhhhhhhhh", invnum_data)
+            invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv", "RealDate", "RealTime"]
             invnum_dicts = dict(zip(invnum_keys, invnum_data))
             if data["tableNo"]:
                 cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{data["tableNo"]}'")
@@ -1198,6 +1201,7 @@ async def chooseAccess(company_name: str, tableNo: str, loggedUser: str):
         cursor.execute(tableNo_query)
         tableNo_fetch = cursor.fetchone()
         if(tableNo_fetch):
+            print("lllllllllllllllllllllllllll", tableNo_fetch[1])
             column_names = [desc[0] for desc in cursor.description]
             row_dict = dict(zip(column_names, tableNo_fetch))
             print("nameeeeeeeeeeeeeeeees", row_dict["UsedBy"])
@@ -1205,7 +1209,7 @@ async def chooseAccess(company_name: str, tableNo: str, loggedUser: str):
             if row_dict["UsedBy"] != "" and row_dict["UsedBy"] != loggedUser:
                 return {"message": "you can't access this table right now", "usedBy": row_dict["UsedBy"]}
             elif row_dict["UsedBy"] != "" and row_dict["UsedBy"] == loggedUser:
-                return {"message": "you can access this table", "usedBy": row_dict["UsedBy"]}
+                return {"message": "you can access this table", "usedBy": row_dict["UsedBy"], "invNo": tableNo_fetch[1]}
         return {"message": "you can access this table", "usedBy": ""}
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1222,7 +1226,6 @@ async def openTable(company_name: str, tableNo: str, loggedUser: str):
         cursor = conn.cursor()
         cursor.execute(f"SELECT * FROM inv WHERE TableNo = '{tableNo}' LIMIT 1")
         existTable = cursor.fetchone()
-        print("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwww", existTable)
         if(existTable is None):
             cursor.execute("Insert Into invnum () Values (); ")
             invoice_code = cursor.lastrowid
@@ -1232,6 +1235,9 @@ async def openTable(company_name: str, tableNo: str, loggedUser: str):
                 f"UPDATE tablesettings SET UsedBy = '{loggedUser}' WHERE TableNo = '{tableNo}'"
             )
             conn.commit()
+            return {"message": invoice_code}
+        else:
+            return {"message": existTable[1]}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
