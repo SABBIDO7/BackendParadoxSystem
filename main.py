@@ -22,9 +22,9 @@ app.add_middleware(
 
 DATABASE_CONFIG = {
     "user": "root",
-    "password": "yara",
-    "host": "localhost",
-    "port": 3308,
+    "password": "Hkms0ft",
+    "host": "80.81.158.76",
+    "port": 9988,
     "charset": "utf8mb4",
     "collation": "utf8mb4_unicode_ci"
 }
@@ -39,12 +39,14 @@ def get_db(company_name: str):
         )
         return connection
     except mysql.connector.Error as err:
+        error_message = None
         if err.errno == mysql.connector.errorcode.ER_ACCESS_DENIED_ERROR:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            error_message = "Invalid credentials"
         elif err.errno == mysql.connector.errorcode.ER_BAD_DB_ERROR:
-            raise HTTPException(status_code=404, detail="Company not found")
+            error_message = "Company not found"
         else:
-            raise HTTPException(status_code=500, detail="Internal Server Error")
+            error_message = "Internal Server Error"
+        return error_message
 
 @app.post("/login")
 async def login(request: Request):
@@ -57,24 +59,28 @@ async def login(request: Request):
         user_query = (
             f"SELECT * FROM users "
             f"WHERE username = '{username}' AND password = '{password}' "
-            f"AND EXISTS (SELECT name FROM company WHERE name = '{company_name}')"
         )
 
         # Establish the database connection
         conn = get_db(company_name)
+        if isinstance(conn, str):  # Check if conn is an error message
+            print("hhhhhhhhhhhhonnnnnnnnnnnnnn", conn)
+            print(conn)
+            return {"message": "Invalid Credentials"}  # Return the error message directly
 
         cursor = conn.cursor()
         cursor.execute(user_query)
         user = cursor.fetchone()
 
         if not user:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            return {"message": "Invalid Credentials"}
 
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
 
         # Convert the list of tuples to a list of dictionaries
         user = dict(zip(column_names, user))
+
         print("LOGGEEDDDDDDDDDD INNNNNNNNNNNNNNN USERRRRRRRRRRRRRRRRRRR")
         print("Received data:", username, password, company_name)
         print("Authentication successful:", username, company_name)
@@ -94,7 +100,6 @@ async def get_users(company_name: str):
         cursor = conn.cursor()
         user_query = (
             f"SELECT * FROM users "
-            f"WHERE EXISTS (SELECT name FROM company WHERE name = '{company_name}')"
         )
 
         cursor.execute(user_query)
@@ -712,6 +717,117 @@ async def get_item_detail(company_name: str, item_no: str):
         if conn:
             conn.close()
 
+@app.post("/updateGroups/{company_name}/{group_id}")
+async def updateGroups(
+        company_name: str,
+        group_id: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Get JSON data from request body
+        data = await request.json()
+        print("Received data:", data)
+
+        # Check if the updated ItemNo already exists and is not the same as the original one
+        existing_group_query = "SELECT GroupNo FROM groupitem WHERE GroupNo = %s"
+        cursor.execute(existing_group_query, (data["GroupNo"],))
+        existing_item = cursor.fetchone()
+        if existing_item is not None and group_id != data["GroupNo"]:
+            return {"message":"GroupNo already exists. Please choose another GroupNo."}
+
+        # Construct the SQL update query dynamically based on the fields provided in the request
+        update_query = (
+            "UPDATE groupitem SET "
+            "GroupNo = %s, GroupName = %s, Image = %s "
+            "WHERE GroupNo = %s"
+        )
+        update_values = [
+            data["GroupNo"],
+            data["GroupName"],
+            data["Image"],
+            group_id
+        ]
+        update_inv_query = "UPDATE inv SET GroupNo = %s WHERE GroupNo = %s"
+        cursor.execute(update_inv_query, (data["GroupNo"], group_id))
+
+        # Commit the changes to the database
+        conn.commit()
+
+        # Execute the update query for items table
+        cursor.execute(update_query, tuple(update_values))
+        conn.commit()
+        return {"message": "Group details updated successfully", "oldItemNo": group_id, "newItemNo": data["GroupNo"]}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.post("/addgroup/{company_name}/{group_no}")
+async def addgroup(
+        company_name: str,
+        group_no: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Check if the user exists
+        addGroup_query = f"SELECT * FROM groupitem WHERE GroupNo = %s"
+
+        cursor.execute(addGroup_query, (group_no,))
+
+        existGroup = cursor.fetchone()
+        if existGroup is not None:
+            return {"message": "Group already exists"}
+        data = await request.json()
+        insert_query = f"INSERT INTO groupitem(GroupNo, GroupName, Image) VALUES (%s, %s, %s)"
+        cursor.execute(insert_query, (group_no, '', ''))
+        conn.commit()
+        return {"message": "Group added successfully", "group": group_no}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/getGroupDetail/{company_name}/{group_no}")
+async def get_item_detail(company_name: str, group_no: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        addgroup_query = (
+            "SELECT GroupNo, GroupName, Image "
+            "FROM groupitem "
+            "WHERE GroupNo = %s;"
+        )
+        cursor.execute(addgroup_query, (group_no,))
+        addgroup = cursor.fetchone()
+        # Convert the tuple to a dictionary
+        getaddgroup_dict = dict(zip(cursor.column_names, addgroup))
+        print("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", getaddgroup_dict)
+
+        return getaddgroup_dict
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        if conn:
+            conn.close()
+
 @app.get("/clients/{company_name}")
 async def get_clients(company_name: str):
     try:
@@ -759,9 +875,8 @@ async def add_client(
         if client is not None:
             return {"message": "Client already exists"}
         client_name_uppercase = user_name.upper()
-        data = await request.json()
-        initial_insert_query = "INSERT INTO clients(AccName) VALUES (%s)"
-        cursor.execute(initial_insert_query, (client_name_uppercase,))
+        initial_insert_query = "INSERT INTO clients(AccName, Address, Address2, Tel, Building, Street, Floor, Active, GAddress, Email, VAT, Region, AccPrice, AccGroup, AccDisc, AccRemark) VALUES (%s, %s, %s, %s, %s, %s, %s, %s , %s, %s, %s, %s , %s, %s, %s, %s)"
+        cursor.execute(initial_insert_query, (client_name_uppercase, '', '', '', '', '', '', 'Y', '', '', '', '', '', '', 0.0, ''))
 
         # Commit the changes to the database
         conn.commit()
@@ -1283,9 +1398,9 @@ async def getOneSection(company_name: str):
         cursor = conn.cursor()
         cursor.execute("Select SectionNo from section")
         secNo = cursor.fetchone()
-        print("secccc", secNo[0])
         conn.commit()
-        return {"sectionNo": secNo[0]}
+        if secNo:
+            return {"sectionNo": secNo[0]}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
