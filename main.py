@@ -387,6 +387,7 @@ async def post_invoiceitem(company_name: str, request: Request):
         cursor2 = conn2.cursor()
         data = await request.json()
         items_by_kitchen = defaultdict(list)
+        print("kkkkkkkkkkkkkkkkkkkkkkkkkkkkk",data["unsentMeals"])
 
         if data["meals"] == []:
             return {"message": "Invoice is empty"}
@@ -444,11 +445,13 @@ async def post_invoiceitem(company_name: str, request: Request):
             # Group meals by printer names
             for meal in data["unsentMeals"]:
                 printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
+                print("printer-names")
                 # Remove dashes from printer names
                 printer_names = [name.replace('-', '') for name in printer_names]
                 non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
                 if non_empty_printer_names:  # Check if there are non-empty printer names
                     for kitchen in non_empty_printer_names:
+                        print("iiiiiiiiiiiiiiiiiiiiiii",items_by_kitchen[kitchen].append(meal))
                         items_by_kitchen[kitchen].append(meal)
 
             for item in data["meals"]:
@@ -500,6 +503,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             if data["tableNo"]:
                 cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{data["tableNo"]}'")
                 conn.commit()
+            print("rrrrrrrrrrrrrrrrrrrrrrrrrrrr", items_by_kitchen)
             return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
 
     except HTTPException as e:
@@ -1469,9 +1473,11 @@ async def getCompTime(company_name: str):
         cursor = conn.cursor()
         cursor.execute("Select EndTime from company")
         compTime = cursor.fetchone()
-        print("secccc", compTime[0])
-        conn.commit()
-        return {"compTime": compTime[0]}
+        if compTime:
+            conn.commit()
+            return {"compTime": compTime[0]}
+        else:
+            return {"compTime": "3:00"}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
