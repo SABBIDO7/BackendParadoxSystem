@@ -388,6 +388,7 @@ async def post_invoiceitem(company_name: str, request: Request):
         data = await request.json()
         items_by_kitchen = defaultdict(list)
         print("kkkkkkkkkkkkkkkkkkkkkkkkkkkkk",data["unsentMeals"])
+        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
 
         if data["meals"] == []:
             return {"message": "Invoice is empty"}
@@ -406,7 +407,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             cursor.execute(
                 "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s, RealDate=%s, RealTime=%s WHERE InvNo = %s;",
                 (
-                    data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"],
+                    data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"],
                     data["invType"] + data["invType"], data["realDate"], data["time"], data['message']
                 )
             )
@@ -422,7 +423,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             return {"invoiceDetails": invnum_dicts}
 
         else:
-            cursor.execute(f"Select KT, Name from printers")
+            cursor.execute(f"Select KT, PrinterName from printers")
             printer_data = cursor.fetchall()
             printer_dic = {key: name for key, name in printer_data}
             # Specify keys for grouping
@@ -451,7 +452,6 @@ async def post_invoiceitem(company_name: str, request: Request):
                 non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
                 if non_empty_printer_names:  # Check if there are non-empty printer names
                     for kitchen in non_empty_printer_names:
-                        print("iiiiiiiiiiiiiiiiiiiiiii",items_by_kitchen[kitchen].append(meal))
                         items_by_kitchen[kitchen].append(meal)
 
             for item in data["meals"]:
@@ -487,7 +487,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             cursor.execute(
                 "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, RealDate=%s, RealTime=%s, InvType=%s WHERE InvNo = %s;",
                 (
-                    data["date"], data["time"], "accno", "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], data["invType"], inv_num if data["tableNo"] else invoice_code,
+                    data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], data["invType"], inv_num if data["tableNo"] else invoice_code,
                 )
             )
 
@@ -548,7 +548,7 @@ async def get_allitemswithmod(company_name: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         allitems_query = (
-            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, groupitem.GroupName, groupItem.GroupNo "
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, items.Ingredients, groupitem.GroupName, groupItem.GroupNo "
             "FROM items "
             "LEFT JOIN groupitem ON items.GroupNo = groupitem.GroupNo;"
         )
@@ -627,7 +627,7 @@ async def update_item(
         update_query = (
             "UPDATE items SET "
             "ItemNo = %s, GroupNo = %s, ItemName = %s, "
-            "Image = %s, UPrice = %s, Disc = %s, Tax = %s, KT1 = %s, KT2 = %s, KT3 = %s, KT4 = %s, Active = %s "
+            "Image = %s, UPrice = %s, Disc = %s, Tax = %s, KT1 = %s, KT2 = %s, KT3 = %s, KT4 = %s, Active = %s, Ingredients = %s "
             "WHERE ItemNo = %s"
         )
         update_values = [
@@ -643,6 +643,7 @@ async def update_item(
             data["KT3"],
             data["KT4"],
             data["Active"],
+            data["Ingredients"],
             item_id
         ]
         update_inv_query = "UPDATE inv SET ItemNo = %s WHERE ItemNo = %s"
@@ -684,8 +685,8 @@ async def add_item(
         if existItem is not None:
             return {"message": "Item already exists"}
         data = await request.json()
-        insert_query = f"INSERT INTO items(ItemNo, GroupNo, ItemName, Image, UPrice, Disc, Tax, KT1, KT2, KT3, KT4, Active) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        cursor.execute(insert_query, (item_no, '', '', '', 0.0, 0.0, 0.0, '', '', '', '', 'N'))
+        insert_query = f"INSERT INTO items(ItemNo, GroupNo, ItemName, Image, UPrice, Disc, Tax, KT1, KT2, KT3, KT4, Active, Ingredients) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(insert_query, (item_no, '', '', '', 0.0, 0.0, 0.0, '', '', '', '', 'N', ''))
         conn.commit()
         return {"message": "Item added successfully", "item": item_no}
     except HTTPException as e:
@@ -702,7 +703,7 @@ async def get_item_detail(company_name: str, item_no: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         additem_query = (
-            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, groupitem.GroupName, groupitem.GroupNo "
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, items.Ingredients, groupitem.GroupName, groupitem.GroupNo "
             "FROM items "
             "LEFT JOIN groupitem ON items.GroupNo = groupitem.GroupNo "
             "WHERE items.ItemNo = %s;"
@@ -1447,16 +1448,16 @@ async def getAllInv(company_name: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT inv.*, items.ItemName, groupitem.GroupName
+            SELECT inv.*, items.ItemName, groupitem.GroupName, invnum.*
             FROM inv
             INNER JOIN groupitem ON inv.GroupNo = groupitem.GroupNo
             INNER JOIN items ON inv.ItemNo = items.ItemNo
+            INNER JOIN invnum ON inv.InvNo = invnum.InvNo
         """)
 
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
-        print("iiiiiiiiiiiiiii", inv_list)
         return inv_list
     except HTTPException as e:
         print("Error details:", e.detail)
