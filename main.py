@@ -23,7 +23,7 @@ app.add_middleware(
 DATABASE_CONFIG = {
     "user": "root",
     "password": "Hkms0ft",
-    "host": "80.81.158.76",
+    "host": "192.168.1.129",
     "port": 9988,
     "charset": "utf8mb4",
     "collation": "utf8mb4_unicode_ci"
@@ -519,20 +519,21 @@ async def get_modifiers(company_name: str):
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
-        modifieritems_query = (
-            "SELECT ItemNo, ItemName, Image "
-            "FROM items "
-            "WHERE GroupNo=%s"
-        )
+        cursor.execute("""
+                    SELECT ItemNo, ItemName, Image
+                    FROM items
+                    WHERE GroupNo IN (
+                        SELECT GroupNo
+                        FROM groupitem
+                        WHERE GroupName = 'Mod'
+                    )
+                """)
 
-        cursor.execute(modifieritems_query, ("MOD",))
         modifiersitems = cursor.fetchall()
-
-        # Get column names from cursor.description
+        print("ddddddddddddddd", modifiersitems)
         column_names = [desc[0] for desc in cursor.description]
-
-        # Convert the list of tuples to a list of dictionaries
         modifiers_list = [dict(zip(column_names, modifyitem)) for modifyitem in modifiersitems]
+        print("modifiers_list", modifiers_list)
         return modifiers_list
     except HTTPException as e:
         print("Error details:", e.detail)
