@@ -408,7 +408,7 @@ async def post_invoiceitem(company_name: str, request: Request):
                 "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s, RealDate=%s, RealTime=%s WHERE InvNo = %s;",
                 (
                     data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"],
-                    data["invType"] + data["invType"], data["realDate"], data["time"], data['message']
+                    data["invType"], data["realDate"], data["time"], data['message']
                 )
             )
 
