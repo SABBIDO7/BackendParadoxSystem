@@ -23,7 +23,7 @@ app.add_middleware(
 DATABASE_CONFIG = {
     "user": "root",
     "password": "Hkms0ft",
-    "host": "192.168.1.129",
+    "host": "80.81.158.76",
     "port": 9988,
     "charset": "utf8mb4",
     "collation": "utf8mb4_unicode_ci"
@@ -519,16 +519,12 @@ async def get_modifiers(company_name: str):
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
-        cursor.execute("""
-                    SELECT ItemNo, ItemName, Image
-                    FROM items
-                    WHERE GroupNo IN (
-                        SELECT GroupNo
-                        FROM groupitem
-                        WHERE GroupName = 'Mod'
-                    )
-                """)
-
+        modifieritems_query = (
+            "SELECT ItemNo, ItemName, Image "
+            "FROM items "
+            "WHERE GroupNo=%s"
+        )
+        cursor.execute(modifieritems_query, ("MOD",))
         modifiersitems = cursor.fetchall()
         print("ddddddddddddddd", modifiersitems)
         column_names = [desc[0] for desc in cursor.description]
@@ -1190,22 +1186,31 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                 """
         cursor.execute(existing_table_query, (tableNo,))
         existing_table = cursor.fetchone()
+        print("eeeeeeeeeeeeeeeeee")
         # Get column names from cursor.description if result set exists
         if existing_table:
             column_names = [desc[0] for desc in cursor.description]
             invNo = dict(zip(column_names, existing_table))
             inv_No = invNo["InvNo"]
+            print("eeeeeeeeeeeeeeeeee111111111111111111111111111", inv_No)
+
             update_usedBy = "Update inv set UsedBy = %s where TableNo = %s "
             update_values = [usedBy, tableNo]
             cursor.execute(update_usedBy, tuple(update_values))
             conn.commit()
+            print("eeeeeeeeeeeeeeeeee22222222222222222222222222222222")
+
             cursor.execute(f"Select Disc, Srv from invnum where InvNo ='{inv_No}'")
             result = cursor.fetchone()
             disc, srv = result
+            print("eeeeeeeeeeeeeeeeee33333333333333333333333333333333")
+
             cursor.execute(f"Update tablesettings set UsedBy = '{usedBy}' where TableNo = '{tableNo}'")
             conn.commit()
             cursor.execute(f" Select `Index` from inv where TableNo= '{tableNo}' Group By `Index` ")
             extract_indexes = cursor.fetchall()
+            print("eeeeeeeeeeeeeeeeee555555555555555555555555555555", extract_indexes)
+
             inv_list = []
             if extract_indexes and extract_indexes[0][0] is not None:
 
@@ -1214,13 +1219,18 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                     query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.TableNo = '{tableNo}' and inv.GroupNo != 'MOD' "
                     cursor.execute(query)
                     princ_items = cursor.fetchone()
+                    print("666666666666666666666666666666666666666666666", princ_items)
+
                     column_names = [desc[0] for desc in cursor.description]
                     princ_item = dict(zip(column_names, princ_items))
                     query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.TableNo = '{tableNo}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
                     cursor.execute(query2)
                     item_mods = cursor.fetchall()
+                    print("8888888888888888888888888888888888888888", item_mods)
                     column_names = [desc[0] for desc in cursor.description]
                     item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
+                    print("8888888888888888888888888888888888888888", item_mod)
+
                     item = {
                         "ItemNo": princ_item["ItemNo"],
                         "ItemName": princ_item["ItemName"],
@@ -1241,7 +1251,7 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                         ]
                     }
                     inv_list.append(item)
-
+                print("ffffffffffffffffffff", inv_list)
                 return {"inv_list": inv_list, "invNo": inv_No, "disc": disc, "srv": srv }
         return {"message": "there are no items"}
     except HTTPException as e:
@@ -1443,8 +1453,8 @@ async def getOneSection(company_name: str):
 #     finally:
 #         pass
 
-@app.get("/getAllInv/{company_name}")
-async def getAllInv(company_name: str):
+@app.get("/getInvHistoryDetails/{company_name}/{invNo}")
+async def getAllInv(company_name: str, invNo: str):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
@@ -1454,6 +1464,7 @@ async def getAllInv(company_name: str):
             INNER JOIN groupitem ON inv.GroupNo = groupitem.GroupNo
             INNER JOIN items ON inv.ItemNo = items.ItemNo
             INNER JOIN invnum ON inv.InvNo = invnum.InvNo
+            WHERE inv.InvNo = '{invNo}'
         """)
 
         all_inv = cursor.fetchall()
@@ -1484,4 +1495,23 @@ async def getCompTime(company_name: str):
         print("Error details:", e.detail)
         raise e
     finally:
+        pass
+
+@app.get("/getInvHistory/{company_name}")
+async def getInvHistory(company_name: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"Select * FROM invnum")
+
+        all_inv = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
+        print("invvvvvvvvvvvvvvvvvvv", inv_list)
+        return inv_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
         pass
