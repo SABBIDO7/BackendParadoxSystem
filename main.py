@@ -1458,7 +1458,7 @@ async def getAllInv(company_name: str, invNo: str):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT inv.*, items.ItemName, groupitem.GroupName, invnum.*
             FROM inv
             INNER JOIN groupitem ON inv.GroupNo = groupitem.GroupNo
@@ -1477,6 +1477,7 @@ async def getAllInv(company_name: str, invNo: str):
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
+
 
 @app.get("/getCompTime/{company_name}")
 async def getCompTime(company_name: str):
