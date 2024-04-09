@@ -204,9 +204,15 @@ async def get_company(company_name: str):
 
         cursor.execute(user_query)
         comp = cursor.fetchone()
+        if comp[0] is None:
+            cursor.execute(f"Update company set Name='{company_name}' ")
+            conn.commit()
+            print("llllllllllllllllllllll")
+        print("cccccccccccccccccccccccc", comp[0])
 
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
+        print("listtttttttttttt", column_names)
 
         # Convert the list of tuples to a list of dictionaries
         compOb = dict(zip(column_names, comp))
@@ -558,11 +564,11 @@ async def get_allitemswithmod(company_name: str):
 
         # Convert the list of tuples to a list of dictionaries
         items_list = [dict(zip(column_names, allitem)) for allitem in allitems]
-
         # Handle the case where GroupNo is still ''
         for item in items_list:
             if item['GroupNo'] == '':
                 item['GroupName'] = ' '  # or any default value you want
+        print("itemsssss" ,items_list)
         return items_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1516,3 +1522,92 @@ async def getInvHistory(company_name: str):
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
+
+@app.get("/getDailySalesDetails/{company_name}/{ItemNo}")
+async def getDailySalesDetails(company_name: str, ItemNo: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"Select * FROM inv inner join items on inv.ItemNo = items.ItemNo WHERE  inv.ItemNo ='{ItemNo}' ")
+
+        all_inv = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
+        print("invvvvvvvvvvvvvvvvvvv", inv_list)
+        return inv_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+
+@app.get("/station/{company_name}")
+async def station(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        print("msge box la wael", installedPrinter)
+        user_query = (
+            f"SELECT * FROM stations "
+        )
+        cursor.execute(user_query)
+        stat = cursor.fetchone()
+        print("stat", stat)
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+        print("colllllllllllllllll", column_names)
+        # Convert the list of tuples to a list of dictionaries
+        statDic = dict(zip(column_names, stat))
+        print("eeeeeeeeeeeeee", statDic)
+
+        return statDic
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+
+
+@app.post("/updateStation/{company_name}")
+async def updateStation(company_name: str, request: Request):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        print(data)
+        sql_query = (
+            f"UPDATE stations SET ReceiptName = '{data['ReceiptName']}', "
+            f"A4Name = '{data['A4Name']}', "
+        )
+        cursor.execute(sql_query)
+        conn.commit()
+        return {"message": "Station info successfully updated"}
+    except Exception as e:
+        print("Error details:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        # Close the cursor and connection
+        cursor.close()
+        conn.close()
+
+
+@app.post("/post-endpoint")
+async def handle_post(request: Request):
+    data = await request.json()
+    pcName = data.get('pcName')
+    defaultPrinter = data.get('defaultPrinter')
+    installedPrinters = data.get('installedPrinters')
+    companyName = data.get('companyName')
+    print("gggggggggggggg", companyName)
+    conn = get_db(companyName)
+    cursor = conn.cursor()
+    cursor.execute("Select * from stations")
+    pcdef = cursor.fetchone()
+    if pcdef is None or pcdef[0] is None or pcdef[1] is None:
+        cursor.execute("INSERT INTO stations (pcname, DefaultPrinter) VALUES (%s, %s)", (pcName, defaultPrinter))
+        conn.commit()
+    return installedPrinters
+
