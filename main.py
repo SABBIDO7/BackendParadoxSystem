@@ -1548,7 +1548,6 @@ async def station(company_name: str):
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
-        print("msge box la wael", installedPrinter)
         user_query = (
             f"SELECT * FROM stations "
         )
@@ -1594,20 +1593,4 @@ async def updateStation(company_name: str, request: Request):
         conn.close()
 
 
-@app.post("/post-endpoint")
-async def handle_post(request: Request):
-    data = await request.json()
-    pcName = data.get('pcName')
-    defaultPrinter = data.get('defaultPrinter')
-    installedPrinters = data.get('installedPrinters')
-    companyName = data.get('companyName')
-    print("gggggggggggggg", companyName)
-    conn = get_db(companyName)
-    cursor = conn.cursor()
-    cursor.execute("Select * from stations")
-    pcdef = cursor.fetchone()
-    if pcdef is None or pcdef[0] is None or pcdef[1] is None:
-        cursor.execute("INSERT INTO stations (pcname, DefaultPrinter) VALUES (%s, %s)", (pcName, defaultPrinter))
-        conn.commit()
-    return installedPrinters
 
