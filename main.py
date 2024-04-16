@@ -217,8 +217,14 @@ async def get_company(company_name: str):
         # Convert the list of tuples to a list of dictionaries
         compOb = dict(zip(column_names, comp))
         print("companyssssssssssssssss", compOb)
+        currenciesquery = "Select * from currencies"
+        cursor.execute(currenciesquery)
+        allcur = cursor.fetchall()
+        column_n = [desc[0] for desc in cursor.description]
+        curOb = [dict(zip(column_n, cur)) for cur in allcur]
+        print("currr", curOb)
 
-        return compOb
+        return {"compOb": compOb, "curOb": curOb}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
@@ -226,6 +232,30 @@ async def get_company(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
+@app.get("/getCurr/{company_name}")
+async def getCurr(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cur_query = (
+            f"SELECT * FROM company JOIN currencies ON currencies.id = company.Currency"
+        )
+        cursor.execute(cur_query)
+        cur = cursor.fetchone()
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+        print("listtttttttttttt", column_names)
+        # Convert the list of tuples to a list of dictionaries
+        compOb = dict(zip(column_names, cur))
+        print("Ssssssssssss", compOb)
+        return compOb
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
 
 
 from fastapi import HTTPException, Request
