@@ -245,7 +245,7 @@ async def getCurr(company_name: str):
         cur = cursor.fetchone()
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
-        print("listtttttttttttt", column_names)
+        print("listttttttttttttt", column_names)
         # Convert the list of tuples to a list of dictionaries
         compOb = dict(zip(column_names, cur))
         print("Ssssssssssss", compOb)
