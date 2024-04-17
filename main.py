@@ -1584,13 +1584,10 @@ async def station(company_name: str):
         cursor.execute(user_query)
         stat = cursor.fetchone()
         print("stat", stat)
-        # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
         print("colllllllllllllllll", column_names)
-        # Convert the list of tuples to a list of dictionaries
         statDic = dict(zip(column_names, stat))
         print("eeeeeeeeeeeeee", statDic)
-
         return statDic
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1622,5 +1619,38 @@ async def updateStation(company_name: str, request: Request):
         cursor.close()
         conn.close()
 
+@app.get("/prlist/{company_name}")
+async def prlist(company_name: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"Select * from printers_temp ")
 
+        allp = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        p_list = [dict(zip(column_names, inv)) for inv in allp]
+        print("invvvvvvvvvvvvvvvvvvv", p_list)
+        return p_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+    
+@app.get("/kitchen/{company_name}")
+async def kitchen(company_name: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"Select * from printers ")
 
+        ktSettings = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        kt_list = [dict(zip(column_names, inv)) for inv in ktSettings]
+        print("invvvvvvvvvvvvvvvvvvv", kt_list)
+        return kt_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
