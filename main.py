@@ -1605,8 +1605,13 @@ async def updateStation(company_name: str, request: Request):
         data = await request.json()
         print(data)
         sql_query = (
-            f"UPDATE stations SET ReceiptName = '{data['ReceiptName']}', "
-            f"A4Name = '{data['A4Name']}', "
+            f"UPDATE stations SET "
+            f"ReceiptName = '{data.get('ReceiptName', '')}', "
+            f"A4Name = '{data.get('A4Name', '')}', "
+            f"AllowPrintInv = '{data.get('AllowPrintInv', '')}', "
+            f"AllowPrintKT = '{data.get('AllowPrintKT', '')}', "
+            f"QtyPrintInv = '{data.get('QtyPrintInv', '')}', "
+            f"QtyPrintKT = '{data.get('QtyPrintKT', '')}' "
         )
         cursor.execute(sql_query)
         conn.commit()
@@ -1629,7 +1634,7 @@ async def prlist(company_name: str):
         allp = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         p_list = [dict(zip(column_names, inv)) for inv in allp]
-        print("invvvvvvvvvvvvvvvvvvv", p_list)
+        print("pprrrrrrrrrrrrrrr", p_list)
         return p_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1654,3 +1659,52 @@ async def kitchen(company_name: str):
         raise e
     finally:
         pass
+    
+@app.post("/addKitchen/{company_name}")
+async def addKitchen(company_name: str, request: Request):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        print(data)
+        exist_query = (f"Select * from printers where KT = '{data['name']}' ")
+        cursor.execute(exist_query)
+        queryft = cursor.fetchone()
+        print("queryft", queryft)
+        if queryft:
+            return {"message": "kitchen already exists"}
+        sql_query = (
+            f"INSERT INTO printers (KT, PrinterName, ReportName) VALUES ('{data['name']}', '', '');"
+        )
+        cursor.execute(sql_query)
+        conn.commit()
+        return {"message": "kitchen inserted successfully"}
+    except Exception as e:
+        print("Error details:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        # Close the cursor and connection
+        cursor.close()
+        conn.close()
+
+@app.post("/updateKitchen/{company_name}")
+async def updateKitchen(company_name: str, request: Request):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        print(data)
+        for item in data:
+            exist_query = (
+                f"UPDATE printers SET PrinterName = '{item['PrinterName']}', ReportName = '{item['ReportName']}' WHERE KT = '{item['KT']}'"
+            )
+            cursor.execute(exist_query)
+        conn.commit()  # Commit the transaction after all updates
+        return {"message": "Kitchen updated successfully"}
+    except Exception as e:
+        print("Error details:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        # Close the cursor and connection
+        cursor.close()
+        conn.close()
