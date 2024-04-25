@@ -48,7 +48,7 @@ def get_db(company_name: str):
             error_message = "Internal Server Error"
         return error_message
 
-@app.post("/login")
+@app.post("/pos/login")
 async def login(request: Request):
     try:
         data = await request.json()
@@ -92,7 +92,7 @@ async def login(request: Request):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/users/{company_name}")
+@app.get("/pos/users/{company_name}")
 async def get_users(company_name: str):
     try:
         # Establish the database connection
@@ -122,7 +122,7 @@ async def get_users(company_name: str):
         pass
 
 
-@app.get("/getUserDetail/{company_name}/{username}")
+@app.get("/pos/getUserDetail/{company_name}/{username}")
 async def get_user_detail(company_name: str, username: str):
     try:
         # Establish the database connection
@@ -148,7 +148,7 @@ async def get_user_detail(company_name: str, username: str):
 
 
 
-@app.post("/users/{company_name}/{user_id}")
+@app.post("/pos/users/{company_name}/{user_id}")
 async def update_user(
         company_name: str,
         user_id: int,
@@ -192,7 +192,7 @@ async def update_user(
 
 import json
 
-@app.get("/company/{company_name}")
+@app.get("/pos/company/{company_name}")
 async def get_company(company_name: str):
     try:
         # Establish the database connection
@@ -232,7 +232,7 @@ async def get_company(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/getCurr/{company_name}")
+@app.get("/pos/getCurr/{company_name}")
 async def getCurr(company_name: str):
     try:
         # Establish the database connection
@@ -261,7 +261,7 @@ async def getCurr(company_name: str):
 from fastapi import HTTPException, Request
 
 
-@app.post("/updateCompany/{company_name}")
+@app.post("/pos/updateCompany/{company_name}")
 async def updateCompany(company_name: str, request: Request):
     try:
         conn = get_db(company_name)
@@ -291,7 +291,7 @@ async def updateCompany(company_name: str, request: Request):
         conn.close()
 
 
-@app.post("/addusers/{company_name}/{user_name}")
+@app.post("/pos/addusers/{company_name}/{user_name}")
 async def add_user(
         company_name: str,
         user_name: str,
@@ -329,7 +329,7 @@ async def add_user(
         if conn:
             conn.close()
 
-@app.get("/categories/{company_name}")
+@app.get("/pos/categories/{company_name}")
 async def get_categories(company_name: str):
     try:
         # Establish the database connection
@@ -355,7 +355,7 @@ async def get_categories(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/allitems/{company_name}")
+@app.get("/pos/allitems/{company_name}")
 async def get_allitems(company_name: str):
     try:
         # Establish the database connection
@@ -381,7 +381,7 @@ async def get_allitems(company_name: str):
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
-@app.get("/categoriesitems/{company_name}/{category_id}")
+@app.get("/pos/categoriesitems/{company_name}/{category_id}")
 async def get_itemsCategories(company_name: str, category_id: str):
     try:
         # Establish the database connection
@@ -413,7 +413,7 @@ async def get_itemsCategories(company_name: str, category_id: str):
 
 from collections import defaultdict
 
-@app.post("/invoiceitem/{company_name}")
+@app.post("/pos/invoiceitem/{company_name}")
 async def post_invoiceitem(company_name: str, request: Request):
     try:
         # Establish the database connection
@@ -462,6 +462,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             cursor.execute(f"Select KT, PrinterName from printers")
             printer_data = cursor.fetchall()
             printer_dic = {key: name for key, name in printer_data}
+            print("printer_dic", printer_dic)
             # Specify keys for grouping
             keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
             print("dmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm", data["tableNo"])
@@ -536,6 +537,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             print("hhhhhhhhhhhhhhhhhhhhhhhhh", invnum_data)
             invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv", "RealDate", "RealTime"]
             invnum_dicts = dict(zip(invnum_keys, invnum_data))
+            invnum_dicts["copiesKT"] = data["qtyPrintKT"]
             if data["tableNo"]:
                 cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{data["tableNo"]}'")
                 conn.commit()
@@ -549,7 +551,7 @@ async def post_invoiceitem(company_name: str, request: Request):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/getModifiers/{company_name}")
+@app.get("/pos/getModifiers/{company_name}")
 async def get_modifiers(company_name: str):
     try:
         # Establish the database connection
@@ -574,7 +576,7 @@ async def get_modifiers(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/allitemswithmod/{company_name}")
+@app.get("/pos/allitemswithmod/{company_name}")
 async def get_allitemswithmod(company_name: str):
     try:
         # Establish the database connection
@@ -609,7 +611,7 @@ async def get_allitemswithmod(company_name: str):
             conn.close()
 
 
-@app.get("/groupitems/{company_name}")
+@app.get("/pos/groupitems/{company_name}")
 async def get_groupitems(company_name: str):
     try:
         # Establish the database connection
@@ -633,7 +635,7 @@ async def get_groupitems(company_name: str):
 
 from fastapi import HTTPException
 
-@app.post("/updateItems/{company_name}/{item_id}")
+@app.post("/pos/updateItems/{company_name}/{item_id}")
 async def update_item(
         company_name: str,
         item_id: str,
@@ -697,7 +699,7 @@ async def update_item(
             conn.close()
 
 
-@app.post("/additems/{company_name}/{item_no}")
+@app.post("/pos/additems/{company_name}/{item_no}")
 async def add_item(
         company_name: str,
         item_no: str,
@@ -729,7 +731,7 @@ async def add_item(
         if conn:
             conn.close()
 
-@app.get("/getItemDetail/{company_name}/{item_no}")
+@app.get("/pos/getItemDetail/{company_name}/{item_no}")
 async def get_item_detail(company_name: str, item_no: str):
     try:
         # Establish the database connection
@@ -755,7 +757,7 @@ async def get_item_detail(company_name: str, item_no: str):
         if conn:
             conn.close()
 
-@app.post("/updateGroups/{company_name}/{group_id}")
+@app.post("/pos/updateGroups/{company_name}/{group_id}")
 async def updateGroups(
         company_name: str,
         group_id: str,
@@ -808,7 +810,7 @@ async def updateGroups(
             conn.close()
 
 
-@app.post("/addgroup/{company_name}/{group_no}")
+@app.post("/pos/addgroup/{company_name}/{group_no}")
 async def addgroup(
         company_name: str,
         group_no: str,
@@ -840,7 +842,7 @@ async def addgroup(
         if conn:
             conn.close()
 
-@app.get("/getGroupDetail/{company_name}/{group_no}")
+@app.get("/pos/getGroupDetail/{company_name}/{group_no}")
 async def get_item_detail(company_name: str, group_no: str):
     try:
         # Establish the database connection
@@ -866,7 +868,7 @@ async def get_item_detail(company_name: str, group_no: str):
         if conn:
             conn.close()
 
-@app.get("/clients/{company_name}")
+@app.get("/pos/clients/{company_name}")
 async def get_clients(company_name: str):
     try:
         # Establish the database connection
@@ -892,7 +894,7 @@ async def get_clients(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.post("/addclients/{company_name}/{user_name}")
+@app.post("/pos/addclients/{company_name}/{user_name}")
 async def add_client(
         company_name: str,
         user_name: str,
@@ -927,7 +929,7 @@ async def add_client(
         if conn:
             conn.close()
 
-@app.post("/updateClients/{company_name}/{client_id}")
+@app.post("/pos/updateClients/{company_name}/{client_id}")
 async def update_client(
         company_name: str,
         client_id: str,
@@ -987,7 +989,7 @@ async def update_client(
         if conn:
             conn.close()
 
-@app.get("/getClientDetail/{company_name}/{client_id}")
+@app.get("/pos/getClientDetail/{company_name}/{client_id}")
 async def get_client_detail(company_name: str, client_id: str):
     try:
         # Establish the database connection
@@ -1006,7 +1008,7 @@ async def get_client_detail(company_name: str, client_id: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/allsections/{company_name}")
+@app.get("/pos/allsections/{company_name}")
 async def get_allsections(company_name: str):
     try:
         # Establish the database connection
@@ -1029,7 +1031,7 @@ async def get_allsections(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.post("/addsections/{company_name}")
+@app.post("/pos/addsections/{company_name}")
 async def add_section(
         company_name: str,
         request: Request,
@@ -1061,7 +1063,7 @@ async def add_section(
         if conn:
             conn.close()
 
-@app.post("/updateSections/{company_name}/{section_id}")
+@app.post("/pos/updateSections/{company_name}/{section_id}")
 async def update_section(
         company_name: str,
         section_id: str,
@@ -1107,7 +1109,7 @@ async def update_section(
         if conn:
             conn.close()
 
-@app.get("/alltables/{company_name}/{sectionNo}")
+@app.get("/pos/alltables/{company_name}/{sectionNo}")
 async def get_alltables(company_name: str, sectionNo: str):
     try:
         # Establish the database connection
@@ -1130,7 +1132,7 @@ async def get_alltables(company_name: str, sectionNo: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.post("/addtables/{company_name}/{sectionNo}")
+@app.post("/pos/addtables/{company_name}/{sectionNo}")
 async def add_table(
         company_name: str,
         sectionNo: str,
@@ -1165,7 +1167,7 @@ async def add_table(
         if conn:
             conn.close()
 
-@app.post("/updateTables/{company_name}/{sectionNo}/{tableNo}")
+@app.post("/pos/updateTables/{company_name}/{sectionNo}/{tableNo}")
 async def update_table(
         company_name: str,
         sectionNo: str,
@@ -1208,7 +1210,7 @@ async def update_table(
         if conn:
             conn.close()
 
-@app.get("/getInv/{company_name}/{tableNo}/{usedBy}")
+@app.get("/pos/getInv/{company_name}/{tableNo}/{usedBy}")
 async def getInv(company_name: str, tableNo: str, usedBy: str):
     conn = None
     try:
@@ -1355,7 +1357,7 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
 #         if conn:
 #             conn.close()
 
-@app.get("/chooseAccess/{company_name}/{tableNo}/{loggedUser}")
+@app.get("/pos/chooseAccess/{company_name}/{tableNo}/{loggedUser}")
 async def chooseAccess(company_name: str, tableNo: str, loggedUser: str):
     try:
         # Establish the database connection
@@ -1385,7 +1387,7 @@ async def chooseAccess(company_name: str, tableNo: str, loggedUser: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.post("/openTable/{company_name}/{tableNo}/{loggedUser}")
+@app.post("/pos/openTable/{company_name}/{tableNo}/{loggedUser}")
 async def openTable(company_name: str, tableNo: str, loggedUser: str):
     try:
         # Establish the database connection
@@ -1412,7 +1414,7 @@ async def openTable(company_name: str, tableNo: str, loggedUser: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/resetUsedBy/{company_name}/{InvNo}")
+@app.get("/pos/resetUsedBy/{company_name}/{InvNo}")
 async def resetUsedBy(company_name: str, InvNo: str):
     try:
         # Establish the database connection
@@ -1442,7 +1444,7 @@ async def resetUsedBy(company_name: str, InvNo: str):
         pass
 
 
-@app.get("/getOneSection/{company_name}")
+@app.get("/pos/getOneSection/{company_name}")
 async def getOneSection(company_name: str):
     try:
         # Establish the database connection
@@ -1489,7 +1491,7 @@ async def getOneSection(company_name: str):
 #     finally:
 #         pass
 
-@app.get("/getInvHistoryDetails/{company_name}/{invNo}")
+@app.get("/pos/getInvHistoryDetails/{company_name}/{invNo}")
 async def getAllInv(company_name: str, invNo: str):
     try:
         conn = get_db(company_name)
@@ -1515,7 +1517,7 @@ async def getAllInv(company_name: str, invNo: str):
         pass
 
 
-@app.get("/getCompTime/{company_name}")
+@app.get("/pos/getCompTime/{company_name}")
 async def getCompTime(company_name: str):
     try:
         # Establish the database connection
@@ -1534,7 +1536,7 @@ async def getCompTime(company_name: str):
     finally:
         pass
 
-@app.get("/getInvHistory/{company_name}")
+@app.get("/pos/getInvHistory/{company_name}")
 async def getInvHistory(company_name: str):
     try:
         conn = get_db(company_name)
@@ -1553,7 +1555,7 @@ async def getInvHistory(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/getDailySalesDetails/{company_name}/{ItemNo}")
+@app.get("/pos/getDailySalesDetails/{company_name}/{ItemNo}")
 async def getDailySalesDetails(company_name: str, ItemNo: str):
     try:
         conn = get_db(company_name)
@@ -1572,7 +1574,7 @@ async def getDailySalesDetails(company_name: str, ItemNo: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/station/{company_name}")
+@app.get("/pos/station/{company_name}")
 async def station(company_name: str):
     try:
         # Establish the database connection
@@ -1597,7 +1599,7 @@ async def station(company_name: str):
         pass
 
 
-@app.post("/updateStation/{company_name}")
+@app.post("/pos/updateStation/{company_name}")
 async def updateStation(company_name: str, request: Request):
     try:
         conn = get_db(company_name)
@@ -1624,7 +1626,7 @@ async def updateStation(company_name: str, request: Request):
         cursor.close()
         conn.close()
 
-@app.get("/prlist/{company_name}")
+@app.get("/pos/prlist/{company_name}")
 async def prlist(company_name: str):
     try:
         conn = get_db(company_name)
@@ -1642,7 +1644,7 @@ async def prlist(company_name: str):
     finally:
         pass
     
-@app.get("/kitchen/{company_name}")
+@app.get("/pos/kitchen/{company_name}")
 async def kitchen(company_name: str):
     try:
         conn = get_db(company_name)
@@ -1660,7 +1662,7 @@ async def kitchen(company_name: str):
     finally:
         pass
     
-@app.post("/addKitchen/{company_name}")
+@app.post("/pos/addKitchen/{company_name}")
 async def addKitchen(company_name: str, request: Request):
     try:
         conn = get_db(company_name)
@@ -1687,7 +1689,7 @@ async def addKitchen(company_name: str, request: Request):
         cursor.close()
         conn.close()
 
-@app.post("/updateKitchen/{company_name}")
+@app.post("/pos/updateKitchen/{company_name}")
 async def updateKitchen(company_name: str, request: Request):
     try:
         conn = get_db(company_name)
@@ -1708,3 +1710,20 @@ async def updateKitchen(company_name: str, request: Request):
         # Close the cursor and connection
         cursor.close()
         conn.close()
+
+
+@app.get("/pos/getAllowPrint/{company_name}")
+async def getAllowPrint(company_name: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"Select QtyPrintKT, DefaultPrinter, AllowPrintInv, AllowPrintKT from stations ")
+        result = cursor.fetchone()
+        qtyPrintKT, defaultPrinter, allowInv, allowKT = result
+        return {"qtyPrintKT":qtyPrintKT, "defaultPrinter":defaultPrinter, "allowInv": allowInv, "allowKT":allowKT}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+    
