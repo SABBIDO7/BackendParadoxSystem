@@ -204,11 +204,11 @@ async def get_company(company_name: str):
 
         cursor.execute(user_query)
         comp = cursor.fetchone()
-        if comp[0] is None:
-            cursor.execute(f"Update company set Name='{company_name}' ")
+        if not comp:
+            cursor.execute(f"INSERT INTO company (Name) VALUES ('{company_name}')")
             conn.commit()
             print("llllllllllllllllllllll")
-        print("cccccccccccccccccccccccc", comp[0])
+        print("cccccccccccccccccccccccc", comp)
 
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
@@ -1727,3 +1727,317 @@ async def getAllowPrint(company_name: str):
     finally:
         pass
     
+@app.get("/pos/databaseCreation/{company_name}")
+async def databaseCreation(company_name: str):
+    try:
+        # Connect to MySQL server
+        conn = mysql.connector.connect(
+         user= "root",
+    password = "Hkms0ft",
+    host= "80.81.158.76",
+    port = 9988,
+    database=""
+        )
+        cursor = conn.cursor()
+        # Create the database if it doesn't exist
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {company_name}")
+        conn.commit()
+        cursor.execute(f"USE {company_name}")
+
+        
+        createClient ="""CREATE TABLE `clients` (
+	`AccNo` INT(11) NOT NULL AUTO_INCREMENT,
+	`AccName` VARCHAR(100) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Address` VARCHAR(200) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Address2` VARCHAR(200) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Tel` VARCHAR(60) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Building` VARCHAR(25) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Street` VARCHAR(25) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Floor` VARCHAR(10) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Active` VARCHAR(1) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`GAddress` VARCHAR(500) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Email` VARCHAR(50) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`VAT` VARCHAR(20) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`Region` VARCHAR(20) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`AccPrice` VARCHAR(10) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`AccGroup` VARCHAR(20) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`AccDisc` DOUBLE NULL DEFAULT NULL,
+	`AccRemark` VARCHAR(50) NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	INDEX `AccNo` (`AccNo`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+AUTO_INCREMENT=400011
+;
+"""
+        cursor.execute(createClient)
+        createCompany="""CREATE TABLE `company` (
+	`Name` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Phone` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Street` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Branch` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`City` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Currency` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Name2` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`EndTime` VARCHAR(300) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Rate` DOUBLE NULL DEFAULT NULL,
+	`KD` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	UNIQUE INDEX `ix_company_name` (`Name`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createCompany)
+        createCurrency ="""CREATE TABLE `currencies` (
+	`id` VARCHAR(10) NOT NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
+	`name` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Code` VARCHAR(5) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci'
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createCurrency)
+        createDepartments="""CREATE TABLE `departments` (
+	`id` INT(11) NOT NULL AUTO_INCREMENT,
+	`name` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`description` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	PRIMARY KEY (`id`) USING BTREE,
+	UNIQUE INDEX `name` (`name`) USING BTREE,
+	INDEX `ix_departments_id` (`id`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createDepartments)
+        createGroupItem="""CREATE TABLE `groupitem` (
+	`GroupNo` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`GroupName` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Image` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	UNIQUE INDEX `code` (`GroupNo`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createGroupItem)
+        createInv="""CREATE TABLE `inv` (
+	`InvType` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`InvNo` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`ItemNo` VARCHAR(20) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Barcode` VARCHAR(20) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Branch` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Qty` DOUBLE NULL DEFAULT NULL,
+	`UPrice` DOUBLE NULL DEFAULT NULL,
+	`Disc` DOUBLE NULL DEFAULT NULL,
+	`Tax` DOUBLE NULL DEFAULT NULL,
+	`GroupNo` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`KT1` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`KT2` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`KT3` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`KT4` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`TableNo` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`UsedBy` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Printed` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Index` INT(11) NULL DEFAULT NULL
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createInv)
+        createInvNum="""CREATE TABLE `invnum` (
+	`InvType` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`InvNo` INT(11) NOT NULL AUTO_INCREMENT,
+	`Date` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Time` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`AccountNo` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`CardNo` VARCHAR(20) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Branch` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Disc` DOUBLE NULL DEFAULT NULL,
+	`Srv` DOUBLE NULL DEFAULT NULL,
+	`RealDate` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`RealTime` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	UNIQUE INDEX `InvNo` (`InvNo`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+AUTO_INCREMENT=227
+;
+"""
+        cursor.execute(createInvNum)
+        createItems = """CREATE TABLE `items` (
+	`ItemNo` VARCHAR(20) NOT NULL DEFAULT '0' COLLATE 'latin1_swedish_ci',
+	`GroupNo` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`ItemName` VARCHAR(100) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
+	`Image` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`UPrice` DOUBLE NULL DEFAULT NULL,
+	`Disc` DOUBLE NULL DEFAULT NULL,
+	`Tax` DOUBLE NULL DEFAULT NULL,
+	`KT1` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`KT2` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`KT3` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`KT4` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Active` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Ingredients` VARCHAR(150) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci'
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createItems)
+        createPrinters ="""CREATE TABLE `printers` (
+	`KT` VARCHAR(4) NOT NULL COLLATE 'latin1_swedish_ci',
+	`PrinterName` VARCHAR(50) NOT NULL COLLATE 'latin1_swedish_ci',
+	`ReportName` VARCHAR(50) NOT NULL COLLATE 'latin1_swedish_ci'
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createPrinters)
+        createPrintersTemp="""CREATE TABLE `printers_temp` (
+	`printername` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	UNIQUE INDEX `printername` (`printername`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createPrintersTemp)
+        createSection ="""CREATE TABLE `section` (
+	`SectionNo` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Name` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci'
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;"""
+        cursor.execute(createSection)
+        createStations="""CREATE TABLE `stations` (
+	`pcname` VARCHAR(20) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`DefaultPrinter` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`ReceiptName` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`A4Name` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`AllowPrintInv` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`AllowPrintKT` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`QtyPrintInv` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`QtyPrintKT` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	UNIQUE INDEX `pcname` (`pcname`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createStations)
+        createTableSettings = """CREATE TABLE `tablesettings` (
+	`TableNo` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`TableWaiter` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`SectionNo` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Active` VARCHAR(1) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Description` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`UsedBy` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	UNIQUE INDEX `TableNo` (`TableNo`, `SectionNo`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+;
+"""
+        createUsers ="""CREATE TABLE `users` (
+	`id` INT(11) NOT NULL AUTO_INCREMENT,
+	`username` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`password` VARCHAR(200) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`user_control` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`email` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`sales` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`sales_return` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`purshase` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`purshase_return` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`orders` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`trans` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`items` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`chart` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`statement` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`SAType` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Branch` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	PRIMARY KEY (`id`) USING BTREE,
+	INDEX `ix_users_id` (`id`) USING BTREE
+)
+COLLATE='latin1_swedish_ci'
+ENGINE=InnoDB
+AUTO_INCREMENT=3
+;
+"""
+        cursor.execute(createUsers)
+
+    except Exception as e:
+        raise e
+
+
+@app.get("/pos/currency/{company_name}")
+async def currency(company_name: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"Select * from currencies ")
+
+        crSettings = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        cr_list = [dict(zip(column_names, inv)) for inv in crSettings]
+        print("invvvvvvvvvvvvvvvvvvv", cr_list)
+        return cr_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+    
+@app.post("/pos/addCurrency/{company_name}")
+async def addCurrency(company_name: str, request: Request):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        print(data)
+        exist_query = (f"Select * from currencies where id = '{data['name']}' ")
+        cursor.execute(exist_query)
+        queryft = cursor.fetchone()
+        print("queryft", queryft)
+        if queryft:
+            return {"message": "Currency already exists"}
+        sql_query = (
+            f"INSERT INTO currencies (id, name, Code) VALUES ('{data['name']}', '', '');"
+        )
+        cursor.execute(sql_query)
+        conn.commit()
+        return {"message": "Currency inserted successfully"}
+    except Exception as e:
+        print("Error details:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        # Close the cursor and connection
+        cursor.close()
+        conn.close()
+
+@app.post("/pos/updateCurrency/{company_name}")
+async def updateCurrency(company_name: str, request: Request):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        print(data)
+        for item in data:
+            exist_query = (
+                f"UPDATE currencies SET name = '{item['name']}', Code = '{item['Code']}' WHERE id = '{item['id']}'"
+            )
+            cursor.execute(exist_query)
+        conn.commit()  # Commit the transaction after all updates
+        return {"message": "Currency updated successfully"}
+    except Exception as e:
+        print("Error details:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        # Close the cursor and connection
+        cursor.close()
+        conn.close()
