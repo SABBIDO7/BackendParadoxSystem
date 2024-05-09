@@ -31,7 +31,6 @@ DATABASE_CONFIG = {
 
 def get_db(company_name: str):
     try:
-        print("companyyyyyyyyyyyy nameeee",company_name)
         # Connect to the database using MySQL Connector/Python
         connection = mysql.connector.connect(
             database=company_name,
@@ -64,8 +63,6 @@ async def login(request: Request):
         # Establish the database connection
         conn = get_db(company_name)
         if isinstance(conn, str):  # Check if conn is an error message
-            print("hhhhhhhhhhhhonnnnnnnnnnnnnn", conn)
-            print(conn)
             return {"message": "Invalid Credentials"}  # Return the error message directly
 
         cursor = conn.cursor()
@@ -74,16 +71,10 @@ async def login(request: Request):
 
         if not user:
             return {"message": "Invalid Credentials"}
-
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
-
         # Convert the list of tuples to a list of dictionaries
         user = dict(zip(column_names, user))
-
-        print("LOGGEEDDDDDDDDDD INNNNNNNNNNNNNNN USERRRRRRRRRRRRRRRRRRR")
-        print("Received data:", username, password, company_name)
-        print("Authentication successful:", username, company_name)
         return {"message": "Login successful", "user": user}
     except HTTPException as e:
         print("Validation error details:", e.detail)
@@ -110,9 +101,6 @@ async def get_users(company_name: str):
 
         # Convert the list of tuples to a list of dictionaries
         users_list = [dict(zip(column_names, user)) for user in users]
-
-        # print("userssssssssssssssssssssssssssssss", users_list)
-
         return users_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -131,10 +119,6 @@ async def get_user_detail(company_name: str, username: str):
         user_query = "SELECT * FROM users WHERE username=%s"
         cursor.execute(user_query, (username,))
         user = cursor.fetchone()
-
-        print("userssssssssssssssssssssssssssssss", user)
-        # Get column names from cursor.description
-
         # Convert the tuple to a dictionary
         user_dict = dict(zip(cursor.column_names, user))
 
@@ -205,24 +189,15 @@ async def get_company(company_name: str):
         cursor.execute(user_query)
         comp = cursor.fetchone()
         if not comp:
-            cursor.execute(f"INSERT INTO company (Name) VALUES ('{company_name}')")
+            cursor.execute("INSERT INTO company (Name, Rate) VALUES (%s, %s)", (company_name, 89000))
             conn.commit()
-            print("llllllllllllllllllllll")
-        print("cccccccccccccccccccccccc", comp)
-
-        # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
-        print("listtttttttttttt", column_names)
-
-        # Convert the list of tuples to a list of dictionaries
         compOb = dict(zip(column_names, comp))
-        print("companyssssssssssssssss", compOb)
         currenciesquery = "Select * from currencies"
         cursor.execute(currenciesquery)
         allcur = cursor.fetchall()
         column_n = [desc[0] for desc in cursor.description]
         curOb = [dict(zip(column_n, cur)) for cur in allcur]
-        print("currr", curOb)
 
         return {"compOb": compOb, "curOb": curOb}
     except HTTPException as e:
@@ -245,10 +220,7 @@ async def getCurr(company_name: str):
         cur = cursor.fetchone()
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
-        print("listtttttttttttttt", column_names)
-        # Convert the list of tuples to a list of dictionaries
         compOb = dict(zip(column_names, cur))
-        print("Ssssssssssss", compOb)
         return compOb
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -267,7 +239,6 @@ async def updateCompany(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        print(data)
         sql_query = (
             f"UPDATE company SET Name = '{data['Name']}', "
             f"Phone = '{data['Phone']}', "
@@ -276,11 +247,13 @@ async def updateCompany(company_name: str, request: Request):
             f"City = '{data['City']}', "
             f"Currency = '{data['Currency']}', "
             f"Name2 = '{data['Name2']}', "
-            f"`EndTime` = '{data['EndTime']}' "
+            f"`EndTime` = '{data['EndTime']}', "
+            f"`Rate` = '{data['Rate']}', "
+            f"`KD` = '{data['KD']}' "
+
         )
         cursor.execute(sql_query)
         conn.commit()
-        print("endddddddddddddddddd",data["EndTime"])
         return {"message": "Company info successfully updated"}
     except Exception as e:
         print("Error details:", str(e))
@@ -423,15 +396,11 @@ async def post_invoiceitem(company_name: str, request: Request):
         cursor2 = conn2.cursor()
         data = await request.json()
         items_by_kitchen = defaultdict(list)
-        print("kkkkkkkkkkkkkkkkkkkkkkkkkkkkk",data["unsentMeals"])
-        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", data)
-
         if data["meals"] == []:
             return {"message": "Invoice is empty"}
         # Create a dictionary to store items grouped by kitchen code
         # items_by_kitchen = defaultdict(list)
         # Specify keys for grouping
-        print("mmmmmmmmmmmmmmmmmmmmmm",data["closeTClicked"])
         if data["closeTClicked"]:
             cursor2.execute(f"Select TableNo from inv Where InvNo = '{data['message']}' ")
             tableno = cursor2.fetchone()  # Assuming you want to fetch one row
@@ -462,10 +431,8 @@ async def post_invoiceitem(company_name: str, request: Request):
             cursor.execute(f"Select KT, PrinterName from printers")
             printer_data = cursor.fetchall()
             printer_dic = {key: name for key, name in printer_data}
-            print("printer_dic", printer_dic)
             # Specify keys for grouping
             keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
-            print("dmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm", data["tableNo"])
             inv_num = ''
             invoice_code = 1
             if data["tableNo"]:
@@ -483,7 +450,6 @@ async def post_invoiceitem(company_name: str, request: Request):
             # Group meals by printer names
             for meal in data["unsentMeals"]:
                 printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
-                print("printer-names")
                 # Remove dashes from printer names
                 printer_names = [name.replace('-', '') for name in printer_names]
                 non_empty_printer_names = [name for name in printer_names if name]  # Filter out empty strings
@@ -534,14 +500,12 @@ async def post_invoiceitem(company_name: str, request: Request):
                 (inv_num if data["tableNo"] else invoice_code,))
             invnum_data = cursor.fetchone()
             conn.commit()
-            print("hhhhhhhhhhhhhhhhhhhhhhhhh", invnum_data)
             invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv", "RealDate", "RealTime"]
             invnum_dicts = dict(zip(invnum_keys, invnum_data))
             invnum_dicts["copiesKT"] = data["qtyPrintKT"]
             if data["tableNo"]:
                 cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{data["tableNo"]}'")
                 conn.commit()
-            print("rrrrrrrrrrrrrrrrrrrrrrrrrrrr", items_by_kitchen)
             return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
 
     except HTTPException as e:
@@ -564,10 +528,8 @@ async def get_modifiers(company_name: str):
         )
         cursor.execute(modifieritems_query, ("MOD",))
         modifiersitems = cursor.fetchall()
-        print("ddddddddddddddd", modifiersitems)
         column_names = [desc[0] for desc in cursor.description]
         modifiers_list = [dict(zip(column_names, modifyitem)) for modifyitem in modifiersitems]
-        print("modifiers_list", modifiers_list)
         return modifiers_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -600,7 +562,6 @@ async def get_allitemswithmod(company_name: str):
         for item in items_list:
             if item['GroupNo'] == '':
                 item['GroupName'] = ' '  # or any default value you want
-        print("itemsssss" ,items_list)
         return items_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -649,8 +610,6 @@ async def update_item(
 
         # Get JSON data from request body
         data = await request.json()
-        print("Received data:", data)
-
         # Check if the updated ItemNo already exists and is not the same as the original one
         existing_item_query = "SELECT ItemNo FROM items WHERE ItemNo = %s"
         cursor.execute(existing_item_query, (data["ItemNo"],))
@@ -857,7 +816,6 @@ async def get_item_detail(company_name: str, group_no: str):
         addgroup = cursor.fetchone()
         # Convert the tuple to a dictionary
         getaddgroup_dict = dict(zip(cursor.column_names, addgroup))
-        print("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", getaddgroup_dict)
 
         return getaddgroup_dict
     except HTTPException as e:
@@ -1022,7 +980,6 @@ async def get_allsections(company_name: str):
         allsections = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         section_list = [dict(zip(column_names, section)) for section in allsections]
-        print("lennnnnnnnnnn",len(section_list))
         return {"section_list": section_list}
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1224,30 +1181,22 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                 """
         cursor.execute(existing_table_query, (tableNo,))
         existing_table = cursor.fetchone()
-        print("eeeeeeeeeeeeeeeeee")
         # Get column names from cursor.description if result set exists
         if existing_table:
             column_names = [desc[0] for desc in cursor.description]
             invNo = dict(zip(column_names, existing_table))
             inv_No = invNo["InvNo"]
-            print("eeeeeeeeeeeeeeeeee111111111111111111111111111", inv_No)
-
             update_usedBy = "Update inv set UsedBy = %s where TableNo = %s "
             update_values = [usedBy, tableNo]
             cursor.execute(update_usedBy, tuple(update_values))
             conn.commit()
-            print("eeeeeeeeeeeeeeeeee22222222222222222222222222222222")
-
             cursor.execute(f"Select Disc, Srv from invnum where InvNo ='{inv_No}'")
             result = cursor.fetchone()
             disc, srv = result
-            print("eeeeeeeeeeeeeeeeee33333333333333333333333333333333")
-
             cursor.execute(f"Update tablesettings set UsedBy = '{usedBy}' where TableNo = '{tableNo}'")
             conn.commit()
             cursor.execute(f" Select `Index` from inv where TableNo= '{tableNo}' Group By `Index` ")
             extract_indexes = cursor.fetchall()
-            print("eeeeeeeeeeeeeeeeee555555555555555555555555555555", extract_indexes)
 
             inv_list = []
             if extract_indexes and extract_indexes[0][0] is not None:
@@ -1257,18 +1206,13 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                     query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.TableNo = '{tableNo}' and inv.GroupNo != 'MOD' "
                     cursor.execute(query)
                     princ_items = cursor.fetchone()
-                    print("666666666666666666666666666666666666666666666", princ_items)
-
                     column_names = [desc[0] for desc in cursor.description]
                     princ_item = dict(zip(column_names, princ_items))
                     query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.TableNo = '{tableNo}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
                     cursor.execute(query2)
                     item_mods = cursor.fetchall()
-                    print("8888888888888888888888888888888888888888", item_mods)
                     column_names = [desc[0] for desc in cursor.description]
                     item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
-                    print("8888888888888888888888888888888888888888", item_mod)
-
                     item = {
                         "ItemNo": princ_item["ItemNo"],
                         "ItemName": princ_item["ItemName"],
@@ -1289,7 +1233,6 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                         ]
                     }
                     inv_list.append(item)
-                print("ffffffffffffffffffff", inv_list)
                 return {"inv_list": inv_list, "invNo": inv_No, "disc": disc, "srv": srv }
         return {"message": "there are no items"}
     except HTTPException as e:
@@ -1370,11 +1313,8 @@ async def chooseAccess(company_name: str, tableNo: str, loggedUser: str):
         cursor.execute(tableNo_query)
         tableNo_fetch = cursor.fetchone()
         if(tableNo_fetch):
-            print("lllllllllllllllllllllllllll", tableNo_fetch[1])
             column_names = [desc[0] for desc in cursor.description]
             row_dict = dict(zip(column_names, tableNo_fetch))
-            print("nameeeeeeeeeeeeeeeees", row_dict["UsedBy"])
-            print("loggeeeeeeeeeeeee", loggedUser)
             if row_dict["UsedBy"] != "" and row_dict["UsedBy"] != loggedUser:
                 return {"message": "you can't access this table right now", "usedBy": row_dict["UsedBy"]}
             elif row_dict["UsedBy"] != "" and row_dict["UsedBy"] == loggedUser:
@@ -1433,7 +1373,6 @@ async def resetUsedBy(company_name: str, InvNo: str):
 
         if tableNo_row:  # Check if a row was fetched
             tableNo = tableNo_row[0]  # Access the TableNo value
-            print("vbbbbbbbbbbbbbbbbbbbbbb", tableNo)
             cursor2.execute(f"UPDATE tablesettings SET UsedBy='' WHERE TableNo = '{tableNo}'")
             conn2.commit()
 
@@ -1546,7 +1485,6 @@ async def getInvHistory(company_name: str):
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
-        print("invvvvvvvvvvvvvvvvvvv", inv_list)
         return inv_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1565,7 +1503,6 @@ async def getDailySalesDetails(company_name: str, ItemNo: str):
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
-        print("invvvvvvvvvvvvvvvvvvv", inv_list)
         return inv_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1585,11 +1522,8 @@ async def station(company_name: str):
         )
         cursor.execute(user_query)
         stat = cursor.fetchone()
-        print("stat", stat)
         column_names = [desc[0] for desc in cursor.description]
-        print("colllllllllllllllll", column_names)
         statDic = dict(zip(column_names, stat))
-        print("eeeeeeeeeeeeee", statDic)
         return statDic
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1605,7 +1539,6 @@ async def updateStation(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        print(data)
         sql_query = (
             f"UPDATE stations SET "
             f"ReceiptName = '{data.get('ReceiptName', '')}', "
@@ -1636,7 +1569,6 @@ async def prlist(company_name: str):
         allp = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         p_list = [dict(zip(column_names, inv)) for inv in allp]
-        print("pprrrrrrrrrrrrrrr", p_list)
         return p_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1654,7 +1586,6 @@ async def kitchen(company_name: str):
         ktSettings = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         kt_list = [dict(zip(column_names, inv)) for inv in ktSettings]
-        print("invvvvvvvvvvvvvvvvvvv", kt_list)
         return kt_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1668,7 +1599,6 @@ async def addKitchen(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        print(data)
         exist_query = (f"Select * from printers where KT = '{data['name']}' ")
         cursor.execute(exist_query)
         queryft = cursor.fetchone()
@@ -1695,7 +1625,6 @@ async def updateKitchen(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        print(data)
         for item in data:
             exist_query = (
                 f"UPDATE printers SET PrinterName = '{item['PrinterName']}', ReportName = '{item['ReportName']}' WHERE KT = '{item['KT']}'"
@@ -1787,16 +1716,18 @@ AUTO_INCREMENT=400011
 COLLATE='latin1_swedish_ci'
 ENGINE=InnoDB
 ;
+
 """
         cursor.execute(createCompany)
         createCurrency ="""CREATE TABLE `currencies` (
 	`id` VARCHAR(10) NOT NULL DEFAULT '' COLLATE 'latin1_swedish_ci',
-	`name` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`Code` VARCHAR(5) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci'
+	`name` VARCHAR(50) NULL COLLATE 'latin1_swedish_ci',
+	`Code` VARCHAR(5) NULL COLLATE 'latin1_swedish_ci'
 )
 COLLATE='latin1_swedish_ci'
 ENGINE=InnoDB
 ;
+
 """
         cursor.execute(createCurrency)
         createDepartments="""CREATE TABLE `departments` (
@@ -1944,6 +1875,7 @@ COLLATE='latin1_swedish_ci'
 ENGINE=InnoDB
 ;
 """
+        cursor.execute(createTableSettings)
         createUsers ="""CREATE TABLE `users` (
 	`id` INT(11) NOT NULL AUTO_INCREMENT,
 	`username` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
@@ -1999,11 +1931,9 @@ async def addCurrency(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        print(data)
         exist_query = (f"Select * from currencies where id = '{data['name']}' ")
         cursor.execute(exist_query)
         queryft = cursor.fetchone()
-        print("queryft", queryft)
         if queryft:
             return {"message": "Currency already exists"}
         sql_query = (
@@ -2026,7 +1956,6 @@ async def updateCurrency(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        print(data)
         for item in data:
             exist_query = (
                 f"UPDATE currencies SET name = '{item['name']}', Code = '{item['Code']}' WHERE id = '{item['id']}'"
