@@ -4,7 +4,7 @@ import time
 from itertools import groupby
 
 from fastapi import FastAPI, HTTPException, Request
-import mysql.connector
+import mysql.connector as mariadb
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import subprocess
@@ -19,29 +19,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+dbHost="80.81.158.76"
 DATABASE_CONFIG = {
     "user": "root",
     "password": "Hkms0ft",
     "host": "80.81.158.76",
     "port": 9988,
-    "charset": "utf8mb4",
-    "collation": "utf8mb4_unicode_ci"
 }
 
 def get_db(company_name: str):
     try:
         # Connect to the database using MySQL Connector/Python
-        connection = mysql.connector.connect(
-            database=company_name,
-            **DATABASE_CONFIG
-        )
+        # connection = mariadb.connect(
+        #     database=company_name,
+        #     **DATABASE_CONFIG
+        # )
+        connection = mariadb.connect(user="root", password="Hkms0ft", host=dbHost,port=9988,database = company_name) 
+
         return connection
-    except mysql.connector.Error as err:
+    except mariadb.Error as err:
         error_message = None
-        if err.errno == mysql.connector.errorcode.ER_ACCESS_DENIED_ERROR:
+        if err.errno == mariadb.errorcode.ER_ACCESS_DENIED_ERROR:
             error_message = "Invalid credentials"
-        elif err.errno == mysql.connector.errorcode.ER_BAD_DB_ERROR:
+        elif err.errno == mariadb.errorcode.ER_BAD_DB_ERROR:
             error_message = "Company not found"
         else:
             error_message = "Internal Server Error"
@@ -50,6 +50,7 @@ def get_db(company_name: str):
 @app.post("/pos/login")
 async def login(request: Request):
     try:
+        
         data = await request.json()
         username = data.get('username')
         password = data.get('password')
@@ -59,22 +60,28 @@ async def login(request: Request):
             f"SELECT * FROM users "
             f"WHERE username = '{username}' AND password = '{password}' "
         )
-
+        print("ppp")
+        print(company_name)
         # Establish the database connection
         conn = get_db(company_name)
         if isinstance(conn, str):  # Check if conn is an error message
+            print("p2")
+            print(conn)
             return {"message": "Invalid Credentials"}  # Return the error message directly
-
+        print("p3")
         cursor = conn.cursor()
         cursor.execute(user_query)
+        print("p4")
+        print("hon")
         user = cursor.fetchone()
-
+        print("hon2")
         if not user:
             return {"message": "Invalid Credentials"}
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
         # Convert the list of tuples to a list of dictionaries
         user = dict(zip(column_names, user))
+        print("user data",user)
         return {"message": "Login successful", "user": user}
     except HTTPException as e:
         print("Validation error details:", e.detail)
@@ -435,8 +442,8 @@ async def post_invoiceitem(company_name: str, request: Request):
             keys_to_group_by = ['KT1', 'KT2', 'KT3', 'KT4']
             inv_num = ''
             invoice_code = 1
-            if data["tableNo"]:
-                cursor.execute(f" Select InvNo from inv where tableNo = '{data["tableNo"]}'  LIMIT 1")
+            if data['tableNo']:
+                cursor.execute(f" Select InvNo from inv where tableNo = '{data['tableNo']}'  LIMIT 1")
                 inv_row = cursor.fetchone()
                 inv_num = inv_row[0]
                 cursor.execute(f"DELETE FROM inv WHERE InvNo = '{inv_num}'")
@@ -504,7 +511,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             invnum_dicts = dict(zip(invnum_keys, invnum_data))
             invnum_dicts["copiesKT"] = data["qtyPrintKT"]
             if data["tableNo"]:
-                cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{data["tableNo"]}'")
+                cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{data['tableNo']}'")
                 conn.commit()
             return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
 
@@ -595,6 +602,7 @@ async def get_groupitems(company_name: str):
         pass
 
 from fastapi import HTTPException
+import base64
 
 @app.post("/pos/updateItems/{company_name}/{item_id}")
 async def update_item(
@@ -616,7 +624,14 @@ async def update_item(
         existing_item = cursor.fetchone()
         if existing_item is not None and item_id != data["ItemNo"]:
             return {"message":"ItemNo already exists. Please choose another ItemNo."}
-
+        print("ana data image", data)
+        if "Image" in data and data["existedImage"] == 0:
+            
+            image_data = base64.b64decode(data["Image"]["data"])
+            image_name = data["Image"]["name"]
+            with open(f"C:/scripts/qr/static/media/{company_name}/images/{image_name}", "wb") as image_file:
+                image_file.write(image_data)
+            # Update the data dict to only include the image file name
         # Construct the SQL update query dynamically based on the fields provided in the request
         update_query = (
             "UPDATE items SET "
@@ -628,7 +643,7 @@ async def update_item(
             data["ItemNo"],
             data["GroupNo"],
             data["ItemName"],
-            data["Image"],
+            data["Image"]["name"] if data["existedImage"] == 0 else data["Image"],
             data["UPrice"],
             data["Disc"],
             data["Tax"],
@@ -1660,7 +1675,7 @@ async def getAllowPrint(company_name: str):
 async def databaseCreation(company_name: str):
     try:
         # Connect to MySQL server
-        conn = mysql.connector.connect(
+        conn = mariadb.connector.connect(
          user= "root",
     password = "Hkms0ft",
     host= "80.81.158.76",
