@@ -59,30 +59,27 @@ async def login(request: Request):
         user_query = (
             f"SELECT * FROM users "
             f"WHERE username = '{username}' AND password = '{password}' "
-        )
-        print("ppp")
+        )       
         print(company_name)
         # Establish the database connection
         conn = get_db(company_name)
         if isinstance(conn, str):  # Check if conn is an error message
-            print("p2")
-            print(conn)
             return {"message": "Invalid Credentials"}  # Return the error message directly
-        print("p3")
         cursor = conn.cursor()
         cursor.execute(user_query)
-        print("p4")
-        print("hon")
         user = cursor.fetchone()
-        print("hon2")
         if not user:
             return {"message": "Invalid Credentials"}
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
         # Convert the list of tuples to a list of dictionaries
         user = dict(zip(column_names, user))
-        print("user data",user)
-        return {"message": "Login successful", "user": user}
+        comp_query = (f"Select Phone, Street, City, VAT from company ")
+        cursor.execute(comp_query)
+        comp = cursor.fetchone()
+        column_names = [desc[0] for desc in cursor.description]
+        comp = dict(zip(column_names, comp))
+        return {"message": "Login successful", "user": user, "comp":comp}
     except HTTPException as e:
         print("Validation error details:", e.detail)
         raise e
