@@ -2027,19 +2027,20 @@ async def resetOrderId(company_name: str, request: Request):
             )
         cursor.execute(orderReset)
         conn.commit()  # Commit the transaction after all updates
-        return {"message": "order updated successfully"}
+        return {"message": "The day is closed and order is reset"}
     except Exception as e:
         print("Error details:", str(e))
         raise HTTPException(status_code=500, detail="Internal server error")
     finally:
         pass
 
-@app.get("/pos/reportUserShift/{company_name}/{username}")
-async def getReportUserShift(company_name: str, username: str):
+@app.get("/pos/reportUserShift/{company_name}/{username}/{date}")
+async def getReportUserShift(company_name: str, username: str, date:str):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
-        cursor.execute(f"SELECT InvType, InvNo, RealDate, Time, Branch, Disc, Srv, User FROM invnum WHERE User='{username}' ")
+        formatted_date = date.replace('.', '/')
+        cursor.execute(f"SELECT InvType, InvNo, Date, Time, Branch, Disc, Srv, User FROM invnum WHERE User='{username}' and Date='{formatted_date}' ")
         cashOnHnads = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         cash_list = [dict(zip(column_names, reportUser)) for reportUser in cashOnHnads]
@@ -2073,7 +2074,7 @@ async def getEOD(company_name: str, date: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         formatted_date = date.replace('.', '/')
-        cursor.execute(f"SELECT InvType, InvNo, RealDate, Time, Branch, Disc, Srv, User FROM invnum WHERE Date='{formatted_date}' ")
+        cursor.execute(f"SELECT InvType, InvNo, Date, Time, Branch, Disc, Srv, CashOnHand, User FROM invnum WHERE Date='{formatted_date}' ")
         eod = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         eod_list = [dict(zip(column_names, reportUser)) for reportUser in eod]
