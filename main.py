@@ -620,20 +620,26 @@ async def update_item(
         cursor = conn.cursor()
 
         # Get JSON data from request body
-        data = await request.json()
+        item = await request.json()
+        print("handlee updateeeeeeee", item["existedImage"])
         # Check if the updated ItemNo already exists and is not the same as the original one
         existing_item_query = "SELECT ItemNo FROM items WHERE ItemNo = %s"
-        cursor.execute(existing_item_query, (data["ItemNo"],))
+        cursor.execute(existing_item_query, (item["data"]["ItemNo"],))
         existing_item = cursor.fetchone()
-        if existing_item is not None and item_id != data["ItemNo"]:
+        if existing_item is not None and item_id != item["data"]["ItemNo"]:
             return {"message":"ItemNo already exists. Please choose another ItemNo."}
-        print("ana data image", data)
-        if "Image" in data and data["existedImage"] == 0:
-            
-            image_data = base64.b64decode(data["Image"]["data"])
-            image_name = data["Image"]["name"]
+        if "Image" in item["data"] and item["existedImage"] == 0:
+            # Decode and save the image file
+            image_data = base64.b64decode(item["data"]["Image"]["by"])
+            image_name = item["data"]["Image"]["name"]
             with open(f"C:/scripts/qr/static/media/{company_name}/images/{image_name}", "wb") as image_file:
                 image_file.write(image_data)
+            # Update the data dict to only include the image file name
+            item["data"]["Image"] = image_name
+        elif "Image" in item["data"] and isinstance(item["data"]["Image"], dict) and item["existedImage"] == 1:
+            item["data"]["Image"] = item["data"]["Image"]["name"]
+        else:
+            item["data"]["Image"] = item["data"]["Image"]
             # Update the data dict to only include the image file name
         # Construct the SQL update query dynamically based on the fields provided in the request
         update_query = (
@@ -642,24 +648,25 @@ async def update_item(
             "Image = %s, UPrice = %s, Disc = %s, Tax = %s, KT1 = %s, KT2 = %s, KT3 = %s, KT4 = %s, Active = %s, Ingredients = %s "
             "WHERE ItemNo = %s"
         )
+       # print("item data image", item["data"]["Image"])
         update_values = [
-            data["ItemNo"],
-            data["GroupNo"],
-            data["ItemName"],
-            data["Image"]["name"] if data["existedImage"] == 0 else data["Image"],
-            data["UPrice"],
-            data["Disc"],
-            data["Tax"],
-            data["KT1"],
-            data["KT2"],
-            data["KT3"],
-            data["KT4"],
-            data["Active"],
-            data["Ingredients"],
+            item["data"]["ItemNo"],
+            item["data"]["GroupNo"],
+           item["data"]["ItemName"],
+            item["data"]["Image"],
+            item["data"]["UPrice"],
+            item["data"]["Disc"],
+            item["data"]["Tax"],
+            item["data"]["KT1"],
+            item["data"]["KT2"],
+            item["data"]["KT3"],
+            item["data"]["KT4"],
+            item["data"]["Active"],
+            item["data"]["Ingredients"],
             item_id
         ]
         update_inv_query = "UPDATE inv SET ItemNo = %s WHERE ItemNo = %s"
-        cursor.execute(update_inv_query, (data["ItemNo"], item_id))
+        cursor.execute(update_inv_query, (item["data"]["ItemNo"], item_id))
 
         # Commit the changes to the database
         conn.commit()
@@ -667,7 +674,7 @@ async def update_item(
         # Execute the update query for items table
         cursor.execute(update_query, tuple(update_values))
         conn.commit()
-        return {"message": "Item details updated successfully", "oldItemNo": item_id, "newItemNo": data["ItemNo"]}
+        return {"message": "Item details updated successfully", "oldItemNo": item_id, "newItemNo": item["data"]["ItemNo"]}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
