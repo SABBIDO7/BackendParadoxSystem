@@ -398,6 +398,8 @@ async def post_invoiceitem(company_name: str, request: Request):
         cursor = conn.cursor()
         conn2 = get_db(company_name)
         cursor2 = conn2.cursor()
+        conn3 = get_db(company_name)
+        cursor3 = conn3.cursor()
         data = await request.json()
         items_by_kitchen = defaultdict(list)
         if data["meals"] == []:
@@ -406,10 +408,12 @@ async def post_invoiceitem(company_name: str, request: Request):
         # items_by_kitchen = defaultdict(list)
         # Specify keys for grouping
         if data["closeTClicked"]:
-            cursor2.execute(f"Select TableNo, OrderId from inv Where InvNo = '{data['message']}' ")
+            cursor2.execute(f"Select TableNo from inv Where InvNo = '{data['message']}' ")
             tableno = cursor2.fetchone()  # Assuming you want to fetch one row
             tableno = tableno[0]
-            orderId= tableno[1]
+            cursor3.execute(f"Select TableNo from inv Where InvNo = '{data['message']}' ")
+            orderFetch = cursor3.fetchone()
+            orderId= orderFetch[0]
             print("tttttttttttttttttt", tableno)
             cursor.execute(f"Update tablesettings set UsedBy='' Where TableNo= '{tableno}'")
             cursor.execute(f"Update inv set TableNo='', UsedBy='' Where InvNo='{data['message']}'")
@@ -516,7 +520,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             if data["tableNo"]:
                 cursor.execute(f"Update tablesettings set UsedBy = '' Where TableNo = '{data['tableNo']}'")
                 conn.commit()
-            return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts}
+            return {"message": "Invoice items added successfully", "selectedData": items_by_kitchen, "invoiceDetails": invnum_dicts, }
 
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1258,6 +1262,7 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                         ]
                     }
                     inv_list.append(item)
+                print("invvvvvvvvvv", inv_No)
                 return {"inv_list": inv_list, "invNo": inv_No, "disc": disc, "srv": srv }
         return {"message": "there are no items"}
     except HTTPException as e:
@@ -2029,11 +2034,6 @@ async def resetOrderId(company_name: str, request: Request):
         conn.commit()
         cursor.execute("ALTER TABLE `order` AUTO_INCREMENT = 1")
         conn.commit()
-        orderReset = (
-                f"Insert into `order` () values() "
-            )
-        cursor.execute(orderReset)
-        conn.commit()  # Commit the transaction after all updates
         return {"message": "The day is closed and order is reset"}
     except Exception as e:
         print("Error details:", str(e))
@@ -2041,13 +2041,13 @@ async def resetOrderId(company_name: str, request: Request):
     finally:
         pass
 
-@app.get("/pos/reportUserShift/{company_name}/{username}/{date}")
-async def getReportUserShift(company_name: str, username: str, date:str):
+@app.get("/pos/reportUserShift/{company_name}/{date}")
+async def getReportUserShift(company_name: str, date:str):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
         formatted_date = date.replace('.', '/')
-        cursor.execute(f"SELECT InvType, InvNo, Date, Time, Branch, Disc, Srv, User FROM invnum WHERE User='{username}' and Date='{formatted_date}' ")
+        cursor.execute(f"SELECT InvType, InvNo, Date, Time, Branch, Disc, Srv, User FROM invnum WHERE Date='{formatted_date}' ")
         cashOnHnads = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         cash_list = [dict(zip(column_names, reportUser)) for reportUser in cashOnHnads]
@@ -2058,6 +2058,55 @@ async def getReportUserShift(company_name: str, username: str, date:str):
         raise e
     finally:
         pass
+    
+@app.get("/pos/calculateUserShifts/{company_name}/{date}")
+async def calculateUserShifts(company_name: str, date: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        formatted_date = date.replace('.', '/')
+        GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
+        TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
+        serviceValue= f" {GrossTotal} * invnum.Srv/100 "
+        discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc)/100 "
+        TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1-invnum.Disc/100) "
+        totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
+        totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
+        totalTax= f" {totalTaxSD} + {totall} "
+        query = f"""
+        SELECT 
+            invnum.User, 
+            SUM(inv.Qty) AS TotalQty,
+            SUM({GrossTotal}) AS GrossTotal, 
+            SUM({TotalTaxItem}) AS TotalTaxItem,
+            SUM({TotalDiscount}) AS TotalDiscount,
+            SUM({totalTaxSD}  ) AS TotalTaxSD,
+            SUM({totall}) AS totall,
+            SUM({totalTax}) AS totalTax,
+            SUM({totalTax} + {TotalDiscount}) AS totalFinal,
+            COUNT(DISTINCT invnum.InvNo) AS TotalInvoices
+        FROM 
+            invnum
+        JOIN 
+            inv ON inv.InvNo = invnum.InvNo
+        WHERE 
+            invnum.Date = '{formatted_date}'
+        GROUP BY 
+            invnum.User
+        """
+        cursor.execute(query)
+        
+        report_data = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        report_list = [dict(zip(column_names, row)) for row in report_data]
+        print("Report Data", report_list)
+        return report_list
+    except Exception as e:
+        print("Error details:", str(e))
+        raise HTTPException(status_code=500, detail="An error occurred while calculating user shifts")
+    finally:
+        cursor.close()
+        conn.close()
     
 @app.post("/pos/userShiftClose/{company_name}")
 async def userShiftClose(company_name: str, request: Request):
@@ -2076,6 +2125,23 @@ async def userShiftClose(company_name: str, request: Request):
         pass
 
 @app.get("/pos/eod/{company_name}/{date}")
+async def getEOD(company_name: str, date: str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        formatted_date = date.replace('.', '/')
+        cursor.execute(f"SELECT InvType, InvNo, Date, Time, Branch, Disc, Srv, CashOnHand, User FROM invnum WHERE Date='{formatted_date}' ")
+        eod = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        eod_list = [dict(zip(column_names, reportUser)) for reportUser in eod]
+        return eod_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+
+@app.get("/pos/getCOHUsers/{company_name}/{date}")
 async def getEOD(company_name: str, date: str):
     try:
         conn = get_db(company_name)
