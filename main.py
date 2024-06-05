@@ -407,6 +407,7 @@ async def post_invoiceitem(company_name: str, request: Request):
         # Create a dictionary to store items grouped by kitchen code
         # items_by_kitchen = defaultdict(list)
         # Specify keys for grouping
+        
         if data["closeTClicked"]:
             cursor2.execute(f"Select TableNo from inv Where InvNo = '{data['message']}' ")
             tableno = cursor2.fetchone()  # Assuming you want to fetch one row
@@ -2047,7 +2048,43 @@ async def getReportUserShift(company_name: str, date:str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         formatted_date = date.replace('.', '/')
-        cursor.execute(f"SELECT InvType, InvNo, Date, Time, Branch, Disc, Srv, User FROM invnum WHERE Date='{formatted_date}' ")
+        # cursor.execute(f"SELECT InvType, InvNo, Date, Time, Branch, Disc, Srv, User FROM invnum WHERE Date='{formatted_date}' ")
+        GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
+        TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
+        serviceValue= f" {GrossTotal} * invnum.Srv/100 "
+        discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc)/100 "
+        TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1-invnum.Disc/100) "
+        totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
+        totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
+        totalTax= f" {totalTaxSD} + {totall} "
+        query = f"""
+        SELECT 
+            invnum.User, 
+            invnum.Srv, 
+            invnum.Disc, 
+            invnum.Branch, 
+            invnum.InvType, 
+            invnum.InvNo,
+            invnum.Time,
+            SUM(inv.Qty) AS TotalQty,
+            SUM({GrossTotal}) AS GrossTotal, 
+            SUM({TotalTaxItem}) AS TotalTaxItem,
+            SUM({TotalDiscount}) AS TotalDiscount,
+            SUM({totalTaxSD}  ) AS TotalTaxSD,
+            SUM({totall}) AS totall,
+            SUM({totalTax}) AS totalTax,
+            SUM({totalTax} + {TotalDiscount}) AS totalFinal,
+            COUNT(DISTINCT invnum.InvNo) AS TotalInvoices
+        FROM 
+            invnum
+        JOIN 
+            inv ON inv.InvNo = invnum.InvNo
+        WHERE 
+            invnum.Date = '{formatted_date}' and (invnum.CashOnHand = '' or invnum.CashOnHand is null)
+        GROUP BY 
+            invnum.InvNo
+        """
+        cursor.execute(query)
         cashOnHnads = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         cash_list = [dict(zip(column_names, reportUser)) for reportUser in cashOnHnads]
@@ -2059,6 +2096,27 @@ async def getReportUserShift(company_name: str, date:str):
     finally:
         pass
     
+@app.get("/pos/COHDetails/{company_name}/{date}/{invNo}")
+async def COHDetails(company_name: str, date:str, invNo:str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        totalItem = f" ((inv.Qty * inv.UPrice * (1-inv.Disc/100)) * inv.Tax/100) + (inv.Qty * inv.UPrice * (1-inv.Disc/100)) "
+        queryh=f"Select invnum.User, invnum.InvType, inv.InvNo, items.ItemName, inv.ItemNo, inv.Qty, inv.UPrice, inv.Disc, inv.Tax, {totalItem} as totalItem from invnum JOIN inv ON inv.InvNo = invnum.InvNo JOIN items ON items.ItemNo = inv.ItemNo where inv.invNo={invNo} "
+        print(queryh)
+        cursor.execute(queryh)
+        codDetails = cursor.fetchall()
+        print("Ssssssssss", codDetails)
+        column_names = [desc[0] for desc in cursor.description]
+        cash_list = [dict(zip(column_names, reportUser)) for reportUser in codDetails]
+        print("cashOnHnads",cash_list)
+        return cash_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+
 @app.get("/pos/calculateUserShifts/{company_name}/{date}")
 async def calculateUserShifts(company_name: str, date: str):
     try:
@@ -2123,6 +2181,7 @@ async def userShiftClose(company_name: str, request: Request):
         raise e
     finally:
         pass
+        
 
 @app.get("/pos/eod/{company_name}/{date}")
 async def getEOD(company_name: str, date: str):
