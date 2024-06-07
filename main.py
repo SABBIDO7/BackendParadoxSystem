@@ -1488,18 +1488,19 @@ async def getAllInv(company_name: str, invNo: str):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
+        totalItem = f" ((inv.Qty * inv.UPrice * (1-inv.Disc/100)) * inv.Tax/100) + (inv.Qty * inv.UPrice * (1-inv.Disc/100)) "
         cursor.execute(f"""
-            SELECT inv.*, items.ItemName, groupitem.GroupName, invnum.*
+            SELECT inv.UPrice, inv.Qty, inv.Disc, inv.Tax, items.ItemName, {totalItem} as totalItem, invnum.InvType, invnum.InvNo
             FROM inv
-            INNER JOIN groupitem ON inv.GroupNo = groupitem.GroupNo
-            INNER JOIN items ON inv.ItemNo = items.ItemNo
-            INNER JOIN invnum ON inv.InvNo = invnum.InvNo
+             JOIN items ON inv.ItemNo = items.ItemNo
+             JOIN invnum ON inv.InvNo = invnum.InvNo
             WHERE inv.InvNo = '{invNo}'
         """)
 
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
+        print("Daafef", inv_list)
         return inv_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1532,8 +1533,37 @@ async def getInvHistory(company_name: str):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
-        cursor.execute(f"Select * FROM invnum")
-
+        GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
+        TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
+        serviceValue= f" {GrossTotal} * invnum.Srv/100 "
+        discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc)/100 "
+        TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1-invnum.Disc/100) "
+        totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
+        totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
+        totalTax= f" {totalTaxSD} + {totall} "
+        query = f"""
+        SELECT 
+            invnum.User, invnum.InvNo, invnum.Branch, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv,
+            SUM(inv.Qty) AS TotalQty,
+            SUM({GrossTotal}) AS GrossTotal, 
+            SUM({TotalTaxItem}) AS TotalTaxItem,
+            SUM({TotalDiscount}) AS TotalDiscount,
+            SUM({totalTaxSD}  ) AS TotalTaxSD,
+            SUM({totall}) AS totall,
+            SUM({totalTax}) AS totalTax,
+            SUM({totalTax} + {TotalDiscount}) AS totalFinal,
+            SUM({discountValue}) AS discountValue,
+            SUM({serviceValue}) AS serviceValue,
+            SUM(invnum.Disc) AS disc,
+            SUM(invnum.Srv) AS srv,
+            COUNT(DISTINCT invnum.InvNo) AS TotalInvoices 
+            FROM 
+                invnum
+            JOIN 
+                inv ON inv.InvNo = invnum.InvNo
+            GROUP BY invnum.InvNo
+            """
+        cursor.execute(query)
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
@@ -1544,6 +1574,66 @@ async def getInvHistory(company_name: str):
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
+    
+@app.post("/pos/filterInvHis/{company_name}")
+async def filterInvHis(company_name: str, request: Request):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        startDate = data["startDate"]
+        endDate = data["endDate"]
+        startTime = data["startTime"]
+        endTime = data["endTime"]
+        currDate = data["currDate"]
+        currTime = data["currTime"]
+        print("data", data)
+        GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
+        TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
+        serviceValue= f" {GrossTotal} * invnum.Srv/100 "
+        discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc)/100 "
+        TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1-invnum.Disc/100) "
+        totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
+        totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
+        totalTax= f" {totalTaxSD} + {totall} "
+        query = f"""
+        SELECT 
+            invnum.User, invnum.InvNo, invnum.Branch, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv,
+            SUM(inv.Qty) AS TotalQty,
+            SUM({GrossTotal}) AS GrossTotal, 
+            SUM({TotalTaxItem}) AS TotalTaxItem,
+            SUM({TotalDiscount}) AS TotalDiscount,
+            SUM({totalTaxSD}  ) AS TotalTaxSD,
+            SUM({totall}) AS totall,
+            SUM({totalTax}) AS totalTax,
+            SUM({totalTax} + {TotalDiscount}) AS totalFinal,
+            SUM({discountValue}) AS discountValue,
+            SUM({serviceValue}) AS serviceValue,
+            SUM(invnum.Disc) AS disc,
+            SUM(invnum.Srv) AS srv,
+            COUNT(DISTINCT invnum.InvNo) AS TotalInvoices 
+            FROM 
+                invnum
+            JOIN 
+                inv ON inv.InvNo = invnum.InvNo
+            Where
+                invnum.Date BETWEEN '{startDate}' AND '{endDate if endDate else currDate}'
+                AND invnum.Time BETWEEN '{startTime}' AND '{endTime if endTime else currTime}'
+            GROUP BY invnum.InvNo
+            """
+        cursor.execute(query)
+        all_inv = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
+        print("invvv fff", inv_list)
+        return inv_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+    
 
 @app.get("/pos/getDailySalesDetails/{company_name}/{ItemNo}")
 async def getDailySalesDetails(company_name: str, ItemNo: str):
@@ -2128,10 +2218,8 @@ async def COHDetails(company_name: str, date:str, invNo:str):
         print(queryh)
         cursor.execute(queryh)
         codDetails = cursor.fetchall()
-        print("Ssssssssss", codDetails)
         column_names = [desc[0] for desc in cursor.description]
         cash_list = [dict(zip(column_names, reportUser)) for reportUser in codDetails]
-        print("cashOnHnads",cash_list)
         return cash_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -2184,7 +2272,6 @@ async def calculateUserShifts(company_name: str, date: str):
         report_data = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         report_list = [dict(zip(column_names, row)) for row in report_data]
-        print("Report Data", report_list)
         return report_list
     except Exception as e:
         print("Error details:", str(e))
