@@ -74,16 +74,13 @@ async def login(request: Request):
         column_names = [desc[0] for desc in cursor.description]
         # Convert the list of tuples to a list of dictionaries
         user = dict(zip(column_names, user))
-        comp_query = (f"Select company.Phone, company.Street, company.City, company.VAT, currencies.Code from company join currencies on company.Currency = currencies.id ")
+        comp_query = (f"Select company.Phone, company.Street, company.City, company.VAT, company.EndTime, currencies.Code from company join currencies on company.Currency = currencies.id ")
         cursor.execute(comp_query)
         comp = cursor.fetchone()
         column_names = [desc[0] for desc in cursor.description]
         comp = dict(zip(column_names, comp))
-        accno = 1
-        if "USD" in comp["Code"]:
-            accno = 53000101
-        else:
-            accno = 53000102
+        accno = 53000101 if "USD" in comp["Code"] else 53000102
+        comp["EndTime"] = comp["EndTime"] if comp["EndTime"] and comp["EndTime"].strip().lower() != "none" else "3:00"
         print("aefe", comp)
         return {"message": "Login successful", "user": user, "comp":comp, "accno":accno }
     except HTTPException as e:
@@ -909,19 +906,17 @@ async def add_client(
         client = cursor.fetchone()
         if client is not None:
             return {"message": "Client already exists"}
-        cursor.execute("SELECT COUNT(*) FROM invnum")
-        invnum_count = cursor.fetchone()[0]
-        accno = 1
-        if invnum_count == 0:
+        cursor.execute("SELECT COUNT(*) FROM clients")
+        clients_count = cursor.fetchone()[0]
+        print("ana hon bl add client this is the count", clients_count)
+        if clients_count == 0:
             accno = 41100001
         else:     
-            cursor.execute("SELECT AccountNo FROM invnum WHERE AccountNo LIKE '4%' ORDER BY AccountNo DESC LIMIT 1")
+            cursor.execute("SELECT AccNo FROM clients ORDER BY AccNo DESC LIMIT 1")
             lastAccNo = cursor.fetchone()
             if lastAccNo:
                 lastAccNo = lastAccNo[0]
                 accno = lastAccNo +1
-            else: 
-                accno = 41100001
         client_name_uppercase = user_name.upper()
         initial_insert_query = "INSERT INTO clients(AccNo, AccName, Address, Address2, Tel, Building, Street, Floor, Active, GAddress, Email, VAT, Region, AccPrice, AccGroup, AccDisc, AccRemark) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s , %s, %s, %s, %s , %s, %s, %s, %s)"
         cursor.execute(initial_insert_query, (accno, client_name_uppercase, '', '', '', '', '', '', 'Y', '', '', '', '', '', '', 0.0, ''))
@@ -1510,92 +1505,66 @@ async def getAllInv(company_name: str, invNo: str):
         pass
 
 
-@app.get("/pos/getCompTime/{company_name}")
-async def getCompTime(company_name: str):
-    try:
-        # Establish the database connection
-        conn = get_db(company_name)
-        cursor = conn.cursor()
-        cursor.execute("Select EndTime from company")
-        compTime = cursor.fetchone()
-        if compTime:
-            return {"compTime": compTime[0]}
-        else:
-            return {"compTime": "3:00"}
-    except HTTPException as e:
-        print("Error details:", e.detail)
-        raise e
-    finally:
-        pass
-
-@app.get("/pos/getInvHistory/{company_name}")
-async def getInvHistory(company_name: str):
-    try:
-        conn = get_db(company_name)
-        cursor = conn.cursor()
-        GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
-        TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
-        serviceValue= f" {GrossTotal} * invnum.Srv/100 "
-        discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc)/100 "
-        TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1-invnum.Disc/100) "
-        totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
-        totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
-        totalTax= f" {totalTaxSD} + {totall} "
-        query = f"""
-        SELECT 
-            invnum.User, invnum.InvNo, invnum.Branch, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv,
-            SUM(inv.Qty) AS TotalQty,
-            SUM({GrossTotal}) AS GrossTotal, 
-            SUM({TotalTaxItem}) AS TotalTaxItem,
-            SUM({TotalDiscount}) AS TotalDiscount,
-            SUM({totalTaxSD}  ) AS TotalTaxSD,
-            SUM({totall}) AS totall,
-            SUM({totalTax}) AS totalTax,
-            SUM({totalTax} + {TotalDiscount}) AS totalFinal,
-            SUM({discountValue}) AS discountValue,
-            SUM({serviceValue}) AS serviceValue,
-            SUM(invnum.Disc) AS disc,
-            SUM(invnum.Srv) AS srv,
-            COUNT(DISTINCT invnum.InvNo) AS TotalInvoices 
-            FROM 
-                invnum
-            JOIN 
-                inv ON inv.InvNo = invnum.InvNo
-            GROUP BY invnum.InvNo
-            """
-        cursor.execute(query)
-        all_inv = cursor.fetchall()
-        column_names = [desc[0] for desc in cursor.description]
-        inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
-        return inv_list
-    except HTTPException as e:
-        print("Error details:", e.detail)
-        raise e
-    finally:
-        # The connection will be automatically closed when it goes out of scope
-        pass
-    
+# @app.get("/pos/getCompTime/{company_name}")
+# async def getCompTime(company_name: str):
+#     try:
+#         # Establish the database connection
+#         conn = get_db(company_name)
+#         cursor = conn.cursor()
+#         cursor.execute("Select EndTime from company")
+#         compTime = cursor.fetchone()
+#         if compTime:
+#             return {"compTime": compTime[0]}
+#         else:
+#             return {"compTime": "3:00"}
+#     except HTTPException as e:
+#         print("Error details:", e.detail)
+#         raise e
+#     finally:
+#         pass
+   
 @app.post("/pos/filterInvHis/{company_name}")
 async def filterInvHis(company_name: str, request: Request):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        startDate = data["startDate"]
-        endDate = data["endDate"]
-        startTime = data["startTime"]
-        endTime = data["endTime"]
+        startDate = data.get("startDate")
+        endDate = data.get("endDate")
+        startTime = data.get("startTime")
+        endTime = data.get("endTime")
         currDate = data["currDate"]
         currTime = data["currTime"]
         print("data", data)
+        
         GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
         TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
-        serviceValue= f" {GrossTotal} * invnum.Srv/100 "
-        discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc)/100 "
-        TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1-invnum.Disc/100) "
-        totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
-        totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
-        totalTax= f" {totalTaxSD} + {totall} "
+        serviceValue = f" {GrossTotal} * invnum.Srv / 100 "
+        discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc) / 100 "
+        TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1 - invnum.Disc / 100) "
+        totalTaxSD = f" ({TotalTaxItem} * (1 + invnum.Srv / 100) * (1 - invnum.Disc / 100)) "
+        totall = f" ({serviceValue} * 11 / 100) * (1 - invnum.Disc / 100) "
+        totalTax = f" {totalTaxSD} + {totall} "
+        
+        conditions = []
+
+        if startDate and endDate:
+            conditions.append(f"invnum.Date BETWEEN '{startDate}' AND '{endDate}'")
+        elif startDate:
+            conditions.append(f"invnum.Date BETWEEN '{startDate}' AND '{currDate}'")
+        elif endDate:
+            conditions.append(f"invnum.Date <= '{endDate}'")
+        
+        if startTime and endTime:
+            conditions.append(f"invnum.Time BETWEEN '{startTime}' AND '{endTime}'")
+        elif startTime:
+            conditions.append(f"invnum.Time BETWEEN '{startTime}' AND '{currTime}'")
+        elif endTime:
+            conditions.append(f"invnum.Time <= '{endTime}'")
+        
+        if not conditions:
+            conditions.append("1 = 1")  # Default condition to return all records if no date/time is provided
+
         query = f"""
         SELECT 
             invnum.User, invnum.InvNo, invnum.Branch, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv,
@@ -1603,7 +1572,7 @@ async def filterInvHis(company_name: str, request: Request):
             SUM({GrossTotal}) AS GrossTotal, 
             SUM({TotalTaxItem}) AS TotalTaxItem,
             SUM({TotalDiscount}) AS TotalDiscount,
-            SUM({totalTaxSD}  ) AS TotalTaxSD,
+            SUM({totalTaxSD}) AS TotalTaxSD,
             SUM({totall}) AS totall,
             SUM({totalTax}) AS totalTax,
             SUM({totalTax} + {TotalDiscount}) AS totalFinal,
@@ -1612,15 +1581,15 @@ async def filterInvHis(company_name: str, request: Request):
             SUM(invnum.Disc) AS disc,
             SUM(invnum.Srv) AS srv,
             COUNT(DISTINCT invnum.InvNo) AS TotalInvoices 
-            FROM 
-                invnum
-            JOIN 
-                inv ON inv.InvNo = invnum.InvNo
-            Where
-                invnum.Date BETWEEN '{startDate}' AND '{endDate if endDate else currDate}'
-                AND invnum.Time BETWEEN '{startTime}' AND '{endTime if endTime else currTime}'
-            GROUP BY invnum.InvNo
-            """
+        FROM 
+            invnum
+        JOIN 
+            inv ON inv.InvNo = invnum.InvNo
+        WHERE
+            {" AND ".join(conditions)}
+        GROUP BY invnum.InvNo
+        """
+
         cursor.execute(query)
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
@@ -1633,7 +1602,6 @@ async def filterInvHis(company_name: str, request: Request):
     finally:
         # The connection will be automatically closed when it goes out of scope
         pass
-    
 
 @app.get("/pos/getDailySalesDetails/{company_name}/{ItemNo}")
 async def getDailySalesDetails(company_name: str, ItemNo: str):
