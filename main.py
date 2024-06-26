@@ -438,7 +438,7 @@ async def post_invoiceitem(company_name: str, request: Request):
             conn.commit()
             invnum_keys = ["InvType", "InvNo", "Date", "Time", "AccountNo", "CardNo", "Branch", "Disc", "Srv", "RealDate", "RealTime", "OrderId"]
             invnum_dicts = dict(zip(invnum_keys, invnum_data))
-            return {"invoiceDetails": invnum_dicts}
+            return {"message": "Table closed", "invoiceDetails": invnum_dicts}
 
         else:      
             cursor.execute(f"Select KT, PrinterName from printers")
@@ -557,19 +557,45 @@ async def get_modifiers(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/pos/allitemswithmod/{company_name}")
-async def get_allitemswithmod(company_name: str):
+@app.get("/pos/allitemswithmod/{company_name}/{current_date}")
+async def get_allitemswithmod(company_name: str, current_date:str):
     try:
+        formatted_date = current_date.replace('.', '/')
         # Establish the database connection
         conn = get_db(company_name)
         cursor = conn.cursor()
-        allitems_query = (
-            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, items.Ingredients, groupitem.GroupName, groupItem.GroupNo "
-            "FROM items "
-            "LEFT JOIN groupitem ON items.GroupNo = groupitem.GroupNo;"
+        invnum_query = (
+            "SELECT InvNo "
+            "FROM invnum "
+            "WHERE Date = %s;"
         )
+        
+        cursor.execute(invnum_query, (formatted_date,))
+        invnum_results = cursor.fetchall()
+        
+        if not invnum_results:
+            return []
 
-        cursor.execute(allitems_query)
+        # Extract the InvNo values
+        inv_nos = [row[0] for row in invnum_results]
+        totalItem = f"((SUM(inv.Qty) * inv.UPrice * (1-inv.Disc/100)) * inv.Tax/100) + (SUM(inv.Qty) * inv.UPrice * (1-inv.Disc/100)) "
+
+        # Step 3: Get the items grouped by ItemNo and filter by Active = 'Y' and join with groupitem table
+        allitems_query = (
+        f"""SELECT items.ItemNo, items.ItemName, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, groupitem.GroupName, groupitem.GroupNo, 
+               SUM(inv.Qty) AS TotalQty ,
+               {totalItem} AS TotalItem 
+        FROM items 
+        LEFT JOIN groupitem ON items.GroupNo = groupitem.GroupNo 
+        LEFT JOIN inv ON items.ItemNo = inv.ItemNo 
+        WHERE items.Active = 'Y' AND inv.InvNo IN ({','.join(['%s'] * len(inv_nos))}) AND groupitem.GroupNo != 'MOD' 
+         GROUP BY items.ItemNo;"""
+        )
+    
+
+
+# Execute the query with item_nos as parameters
+        cursor.execute(allitems_query, inv_nos)
         allitems = cursor.fetchall()
 
         # Get column names from cursor.description
@@ -1485,10 +1511,11 @@ async def getAllInv(company_name: str, invNo: str):
         cursor = conn.cursor()
         totalItem = f" ((inv.Qty * inv.UPrice * (1-inv.Disc/100)) * inv.Tax/100) + (inv.Qty * inv.UPrice * (1-inv.Disc/100)) "
         cursor.execute(f"""
-            SELECT inv.UPrice, inv.Qty, inv.Disc, inv.Tax, items.ItemName, {totalItem} as totalItem, invnum.InvType, invnum.InvNo
+            SELECT inv.UPrice, inv.Qty, inv.Disc, inv.Tax, items.ItemName, {totalItem} as totalItem, invnum.InvType, invnum.InvNo, groupitem.GroupName
             FROM inv
              JOIN items ON inv.ItemNo = items.ItemNo
              JOIN invnum ON inv.InvNo = invnum.InvNo
+             JOIN groupitem on groupitem.GroupNo=inv.GroupNo
             WHERE inv.InvNo = '{invNo}'
         """)
 
@@ -1603,12 +1630,21 @@ async def filterInvHis(company_name: str, request: Request):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/pos/getDailySalesDetails/{company_name}/{ItemNo}")
-async def getDailySalesDetails(company_name: str, ItemNo: str):
+@app.get("/pos/getDailySalesDetails/{company_name}/{ItemNo}/{current_date}")
+async def getDailySalesDetails(company_name: str, ItemNo: str, current_date):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
-        cursor.execute(f"Select * FROM inv inner join items on inv.ItemNo = items.ItemNo WHERE  inv.ItemNo ='{ItemNo}' ")
+        formatted_date=current_date.replace('.', '/')
+        GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
+        TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
+        serviceValue = f" {GrossTotal} * invnum.Srv / 100 "
+        discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc) / 100 "
+        TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1 - invnum.Disc / 100) "
+        totalTaxSD = f" ({TotalTaxItem} * (1 + invnum.Srv / 100) * (1 - invnum.Disc / 100)) "
+        totall = f" ({serviceValue} * 11 / 100) * (1 - invnum.Disc / 100) "
+        totalTax = f" {totalTaxSD} + {totall} "
+        cursor.execute(f"Select *, SUM({totalTax} + {TotalDiscount}) AS totalFinal FROM inv inner join invnum on inv.InvNo = invnum.InvNo WHERE  inv.ItemNo ='{ItemNo}' and invnum.Date='{formatted_date}' GROUP BY invnum.InvNo ")
 
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
