@@ -295,8 +295,8 @@ async def add_user(
 
         # Get JSON data from request body
         data = await request.json()
-        insert_query = f"INSERT INTO users(username, password, user_control, email, sales, sales_return, purshase, purshase_return, orders, trans, items, chart, statement) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        cursor.execute(insert_query, (user_name_uppercase, '', '', '', '', '', '', '', '', '', '', '', ''))
+        insert_query = f"INSERT INTO users(username, password, user_control, email, sales, sales_return, purshase, purshase_return, orders, trans, items, chart, statement, SAType, Branch, COH, EOD) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(insert_query, (user_name_uppercase, '', '', '', "N", "N", "N", "N", "N", "N", "N", "N", "N", "SA", '', user_name_uppercase, "N"))
 
         # Commit the changes to the database
         conn.commit()
@@ -404,6 +404,7 @@ async def post_invoiceitem(company_name: str, request: Request):
         conn3 = get_db(company_name)
         cursor3 = conn3.cursor()
         data = await request.json()
+        print("Adadaf", data)
         items_by_kitchen = defaultdict(list)
         if data["meals"] == []:
             return {"message": "Invoice is empty"}
@@ -423,10 +424,10 @@ async def post_invoiceitem(company_name: str, request: Request):
             cursor.execute(f"Update inv set TableNo='', UsedBy='' Where InvNo='{data['message']}'")
             # Update the invnum table
             cursor.execute(
-                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s WHERE InvNo = %s;",
+                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvKind = %s WHERE InvNo = %s;",
                 (
                     data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"],
-                    data["invType"], data["realDate"], data["time"], orderId, data["username"], data['message']
+                    data["invType"], data["realDate"], data["time"], orderId, data["username"], data["invKind"], data['message']
                 )
             )
 
@@ -507,9 +508,9 @@ async def post_invoiceitem(company_name: str, request: Request):
                             )
             # Update the invnum table
             cursor.execute(
-                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvType=%s WHERE InvNo = %s;",
+                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvType=%s, InvKind =%s WHERE InvNo = %s;",
                 (
-                    data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], order_id, data["username"], data["invType"], inv_num if data["tableNo"] else invoice_code, 
+                    data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], order_id, data["username"], data["invType"], data["invKind"], inv_num if data["tableNo"] else invoice_code
                 )
             )
 
@@ -557,8 +558,8 @@ async def get_modifiers(company_name: str):
         # The connection will be automatically closed when it goes out of scope
         pass
 
-@app.get("/pos/allitemswithmod/{company_name}/{current_date}")
-async def get_allitemswithmod(company_name: str, current_date:str):
+@app.get("/pos/getDailyItems/{company_name}/{current_date}")
+async def getDailyItems(company_name: str, current_date:str):
     try:
         formatted_date = current_date.replace('.', '/')
         # Establish the database connection
@@ -591,9 +592,6 @@ async def get_allitemswithmod(company_name: str, current_date:str):
         WHERE items.Active = 'Y' AND inv.InvNo IN ({','.join(['%s'] * len(inv_nos))}) AND groupitem.GroupNo != 'MOD' 
          GROUP BY items.ItemNo;"""
         )
-    
-
-
 # Execute the query with item_nos as parameters
         cursor.execute(allitems_query, inv_nos)
         allitems = cursor.fetchall()
@@ -616,6 +614,40 @@ async def get_allitemswithmod(company_name: str, current_date:str):
         if conn:
             conn.close()
 
+
+@app.get("/pos/allitemswithmod/{company_name}")
+async def get_allitemswithmod(company_name: str):
+    try:
+        # Establish the database connection
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        allitems_query = (
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, groupitem.GroupName, groupItem.GroupNo "
+            "FROM items "
+            "LEFT JOIN groupitem ON items.GroupNo = groupitem.GroupNo;"
+        )
+
+        cursor.execute(allitems_query)
+        allitems = cursor.fetchall()
+
+        # Get column names from cursor.description
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert the list of tuples to a list of dictionaries
+        items_list = [dict(zip(column_names, allitem)) for allitem in allitems]
+
+        # Handle the case where GroupNo is still ''
+        for item in items_list:
+            if item['GroupNo'] == '':
+                item['GroupName'] = ' '  # or any default value you want
+        return items_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        if conn:
+            conn.close()
 
 @app.get("/pos/groupitems/{company_name}")
 async def get_groupitems(company_name: str):
@@ -934,7 +966,6 @@ async def add_client(
             return {"message": "Client already exists"}
         cursor.execute("SELECT COUNT(*) FROM clients")
         clients_count = cursor.fetchone()[0]
-        print("ana hon bl add client this is the count", clients_count)
         if clients_count == 0:
             accno = 41100001
         else:     
@@ -1304,7 +1335,6 @@ async def getInv(company_name: str, tableNo: str, usedBy: str):
                         ]
                     }
                     inv_list.append(item)
-                print("invvvvvvvvvv", inv_No)
                 return {"inv_list": inv_list, "invNo": inv_No, "disc": disc, "srv": srv }
         return {"message": "there are no items"}
     except HTTPException as e:
@@ -1511,7 +1541,7 @@ async def getAllInv(company_name: str, invNo: str):
         cursor = conn.cursor()
         totalItem = f" ((inv.Qty * inv.UPrice * (1-inv.Disc/100)) * inv.Tax/100) + (inv.Qty * inv.UPrice * (1-inv.Disc/100)) "
         cursor.execute(f"""
-            SELECT inv.UPrice, inv.Qty, inv.Disc, inv.Tax, items.ItemName, {totalItem} as totalItem, invnum.InvType, invnum.InvNo, groupitem.GroupName
+            SELECT inv.UPrice, inv.Qty, inv.Disc, inv.Tax, items.ItemName, {totalItem} as totalItem, invnum.InvType, invnum.InvNo, invnum.Date, invnum.RealDate, invnum.Time, groupitem.GroupName
             FROM inv
              JOIN items ON inv.ItemNo = items.ItemNo
              JOIN invnum ON inv.InvNo = invnum.InvNo
@@ -1522,7 +1552,6 @@ async def getAllInv(company_name: str, invNo: str):
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
-        print("Daafef", inv_list)
         return inv_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1561,9 +1590,7 @@ async def filterInvHis(company_name: str, request: Request):
         startTime = data.get("startTime")
         endTime = data.get("endTime")
         currDate = data["currDate"]
-        currTime = data["currTime"]
-        print("data", data)
-        
+        currTime = data["currTime"]        
         GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
         TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
         serviceValue = f" {GrossTotal} * invnum.Srv / 100 "
@@ -1576,11 +1603,11 @@ async def filterInvHis(company_name: str, request: Request):
         conditions = []
 
         if startDate and endDate:
-            conditions.append(f"invnum.Date BETWEEN '{startDate}' AND '{endDate}'")
+            conditions.append(f"STR_TO_DATE(invnum.Date, '%d/%m/%Y') BETWEEN STR_TO_DATE('{startDate}', '%d/%m/%Y') AND STR_TO_DATE('{endDate}', '%d/%m/%Y')")
         elif startDate:
-            conditions.append(f"invnum.Date BETWEEN '{startDate}' AND '{currDate}'")
+            conditions.append(f"STR_TO_DATE(invnum.Date, '%d/%m/%Y' ) BETWEEN STR_TO_DATE('{startDate}', '%d/%m/%Y') AND STR_TO_DATE('{currDate}', '%d/%m/%Y')")
         elif endDate:
-            conditions.append(f"invnum.Date <= '{endDate}'")
+            conditions.append(f"STR_TO_DATE(invnum.Date, '%d/%m/%Y') <= STR_TO_DATE('{endDate}', '%d/%m/%Y')")
         
         if startTime and endTime:
             conditions.append(f"invnum.Time BETWEEN '{startTime}' AND '{endTime}'")
@@ -1591,7 +1618,6 @@ async def filterInvHis(company_name: str, request: Request):
         
         if not conditions:
             conditions.append("1 = 1")  # Default condition to return all records if no date/time is provided
-
         query = f"""
         SELECT 
             invnum.User, invnum.InvNo, invnum.Branch, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv,
@@ -1607,7 +1633,7 @@ async def filterInvHis(company_name: str, request: Request):
             SUM({serviceValue}) AS serviceValue,
             SUM(invnum.Disc) AS disc,
             SUM(invnum.Srv) AS srv,
-            COUNT(DISTINCT invnum.InvNo) AS TotalInvoices 
+            COUNT(DISTINCT invnum.InvNo) AS TotalInvoices
         FROM 
             invnum
         JOIN 
@@ -1616,12 +1642,10 @@ async def filterInvHis(company_name: str, request: Request):
             {" AND ".join(conditions)}
         GROUP BY invnum.InvNo
         """
-
         cursor.execute(query)
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
-        print("invvv fff", inv_list)
         return inv_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1630,6 +1654,60 @@ async def filterInvHis(company_name: str, request: Request):
         # The connection will be automatically closed when it goes out of scope
         pass
 
+@app.post("/pos/getInvKind/{company_name}")
+async def getInvKind(company_name: str, request: Request):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        startDate = data.get("startDate")
+        endDate = data.get("endDate")
+        startTime = data.get("startTime")
+        endTime = data.get("endTime")
+        currDate = data["currDate"]
+        currTime = data["currTime"]
+        print("data", data)
+        conditions = []
+        if startDate and endDate:
+            conditions.append(f"STR_TO_DATE(Date, '%d/%m/%Y') BETWEEN STR_TO_DATE('{startDate}', '%d/%m/%Y') AND STR_TO_DATE('{endDate}', '%d/%m/%Y')")
+        elif startDate:
+            conditions.append(f"STR_TO_DATE(Date, '%d/%m/%Y' ) BETWEEN STR_TO_DATE('{startDate}', '%d/%m/%Y') AND STR_TO_DATE('{currDate}', '%d/%m/%Y')")
+        elif endDate:
+            conditions.append(f"STR_TO_DATE(Date, '%d/%m/%Y') <= STR_TO_DATE('{endDate}', '%d/%m/%Y')")
+        
+        if startTime and endTime:
+            conditions.append(f"Time BETWEEN '{startTime}' AND '{endTime}'")
+        elif startTime:
+            conditions.append(f"Time BETWEEN '{startTime}' AND '{currTime}'")
+        elif endTime:
+            conditions.append(f"Time <= '{endTime}'")
+        
+        if not conditions:
+            conditions.append("1 = 1")  # Default condition to return all records if no date/time is provided
+
+        query = f"""
+        SELECT 
+           InvKind, COUNT(InvKind) AS TotalInvoices
+        FROM 
+            invnum
+        WHERE
+            {" AND ".join(conditions)}
+        GROUP BY InvKind
+        """
+
+        cursor.execute(query)
+        all_inv = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
+        print("ana hooooooooooooo", inv_list)
+        return inv_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        # The connection will be automatically closed when it goes out of scope
+        pass
+    
 @app.get("/pos/getDailySalesDetails/{company_name}/{ItemNo}/{current_date}")
 async def getDailySalesDetails(company_name: str, ItemNo: str, current_date):
     try:
@@ -2130,7 +2208,6 @@ async def getLastOrderIdDate(company_name: str):
             LIMIT 1
         """)
         lastDateOrder = cursor.fetchone()
-        print("invvvvvvvvvvvvvvvvvvv", lastDateOrder[0])
         return lastDateOrder[0]
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -2157,8 +2234,8 @@ async def resetOrderId(company_name: str, request: Request):
     finally:
         pass
 
-@app.get("/pos/reportUserShift/{company_name}/{date}")
-async def getReportUserShift(company_name: str, date:str):
+@app.get("/pos/reportUserShift/{company_name}/{date}/{allowedUser}")
+async def getReportUserShift(company_name: str, date:str, allowedUser: str):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
@@ -2172,7 +2249,7 @@ async def getReportUserShift(company_name: str, date:str):
         totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
         totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
         totalTax= f" {totalTaxSD} + {totall} "
-        query = f"""
+        base_query = f"""
         SELECT 
             invnum.User, 
             invnum.Srv, 
@@ -2197,14 +2274,15 @@ async def getReportUserShift(company_name: str, date:str):
             inv ON inv.InvNo = invnum.InvNo
         WHERE 
             invnum.Date = '{formatted_date}' and (invnum.CashOnHand = '' or invnum.CashOnHand is null)
-        GROUP BY 
-            invnum.InvNo
         """
+        if allowedUser != "All":
+            query = base_query + f" AND invnum.User = '{allowedUser}' GROUP BY invnum.InvNo"
+        else:
+            query = base_query + " GROUP BY invnum.InvNo"
         cursor.execute(query)
         cashOnHnads = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         cash_list = [dict(zip(column_names, reportUser)) for reportUser in cashOnHnads]
-        print("cashOnHnads",cash_list)
         return cash_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -2219,7 +2297,6 @@ async def COHDetails(company_name: str, date:str, invNo:str):
         cursor = conn.cursor()
         totalItem = f" ((inv.Qty * inv.UPrice * (1-inv.Disc/100)) * inv.Tax/100) + (inv.Qty * inv.UPrice * (1-inv.Disc/100)) "
         queryh=f"Select invnum.User, invnum.InvType, inv.InvNo, items.ItemName, inv.ItemNo, inv.Qty, inv.UPrice, inv.Disc, inv.Tax, {totalItem} as totalItem from invnum JOIN inv ON inv.InvNo = invnum.InvNo JOIN items ON items.ItemNo = inv.ItemNo where inv.invNo={invNo} "
-        print(queryh)
         cursor.execute(queryh)
         codDetails = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
@@ -2231,8 +2308,8 @@ async def COHDetails(company_name: str, date:str, invNo:str):
     finally:
         pass
 
-@app.get("/pos/calculateUserShifts/{company_name}/{date}")
-async def calculateUserShifts(company_name: str, date: str):
+@app.get("/pos/calculateUserShifts/{company_name}/{date}/{allowedUser}")
+async def calculateUserShifts(company_name: str, date: str, allowedUser: str):
     try:
         conn = get_db(company_name)
         cursor = conn.cursor()
@@ -2245,7 +2322,7 @@ async def calculateUserShifts(company_name: str, date: str):
         totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
         totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
         totalTax= f" {totalTaxSD} + {totall} "
-        query = f"""
+        base_query = f"""
         SELECT 
             invnum.User, 
             SUM(inv.Qty) AS TotalQty,
@@ -2267,12 +2344,12 @@ async def calculateUserShifts(company_name: str, date: str):
             inv ON inv.InvNo = invnum.InvNo
         WHERE 
             invnum.Date = '{formatted_date}' AND (invnum.CashOnHand IS NULL OR invnum.CashOnHand = '')
-        GROUP BY 
-            invnum.User
         """
-        print(query)
+        if allowedUser != "All":
+            query = base_query + f" AND invnum.User = '{allowedUser}'"
+        else:
+            query = base_query + " GROUP BY invnum.User"
         cursor.execute(query)
-        
         report_data = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         report_list = [dict(zip(column_names, row)) for row in report_data]
@@ -2291,9 +2368,6 @@ async def userShiftClose(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        
-        print("Received data:", data)
-
         if data["username"] == "all":
             cursor.execute("SELECT User FROM invnum WHERE Date = %s", (data["formattedDate"],))
             allusers = cursor.fetchall()
@@ -2347,6 +2421,20 @@ async def getEOD(company_name: str, date: str):
         column_names = [desc[0] for desc in cursor.description]
         eod_list = [dict(zip(column_names, reportUser)) for reportUser in eod]
         return eod_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+
+@app.get("/pos/getCOHRead/{company_name}/{username}")
+async def getCOHRead(company_name: str, username:str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT COH FROM users WHERE username='{username}' ")
+        COHR = cursor.fetchone()
+        return COHR[0]
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
