@@ -605,6 +605,8 @@ async def getDailyItems(company_name: str, current_date:str):
         for item in items_list:
             if item['GroupNo'] == '':
                 item['GroupName'] = ' '  # or any default value you want
+
+        print("itemssssssssss", items_list)
         return items_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -622,7 +624,7 @@ async def get_allitemswithmod(company_name: str):
         conn = get_db(company_name)
         cursor = conn.cursor()
         allitems_query = (
-            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, groupitem.GroupName, groupItem.GroupNo "
+            "SELECT items.ItemNo, items.ItemName, items.Image, items.UPrice, items.Disc, items.Tax, items.KT1, items.KT2, items.KT3, items.KT4, items.Active, items.Ingredients, groupitem.GroupName, groupItem.GroupNo "
             "FROM items "
             "LEFT JOIN groupitem ON items.GroupNo = groupitem.GroupNo;"
         )
@@ -688,6 +690,7 @@ async def update_item(
 
         # Get JSON data from request body
         item = await request.json()
+        print("iteeeeeeeeeeeeee", item)
         print("handlee updateeeeeeee", item["existedImage"])
         # Check if the updated ItemNo already exists and is not the same as the original one
         existing_item_query = "SELECT ItemNo FROM items WHERE ItemNo = %s"
@@ -2435,6 +2438,20 @@ async def getCOHRead(company_name: str, username:str):
         cursor.execute(f"SELECT COH FROM users WHERE username='{username}' ")
         COHR = cursor.fetchone()
         return COHR[0]
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        pass
+    
+@app.get("/pos/getEODPermission/{company_name}/{username}")
+async def getCOHRead(company_name: str, username:str):
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT EOD FROM users WHERE username='{username}' ")
+        EODR = cursor.fetchone()
+        return EODR[0]
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
