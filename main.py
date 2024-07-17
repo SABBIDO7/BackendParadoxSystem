@@ -1594,7 +1594,10 @@ async def filterInvHis(company_name: str, request: Request):
         startTime = data.get("startTime")
         endTime = data.get("endTime")
         currDate = data["currDate"]
-        currTime = data["currTime"]        
+        currTime = data["currTime"]     
+        selectedOptionBranch = data.get("selectedOptionBranch")
+        selectedOptionUser = data.get("selectedOptionUser")
+        selectedOptionSA = data.get("selectedOptionSA")   
         GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
         TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
         serviceValue = f" {GrossTotal} * invnum.Srv / 100 "
@@ -1609,7 +1612,7 @@ async def filterInvHis(company_name: str, request: Request):
         if startDate and endDate:
             conditions.append(f"STR_TO_DATE(invnum.Date, '%d/%m/%Y') BETWEEN STR_TO_DATE('{startDate}', '%d/%m/%Y') AND STR_TO_DATE('{endDate}', '%d/%m/%Y')")
         elif startDate:
-            conditions.append(f"STR_TO_DATE(invnum.Date, '%d/%m/%Y' ) BETWEEN STR_TO_DATE('{startDate}', '%d/%m/%Y') AND STR_TO_DATE('{currDate}', '%d/%m/%Y')")
+            conditions.append(f"STR_TO_DATE(invnum.Date, '%d/%m/%Y' ) BETWEEN STR_TO_DATE('{startDate}', '%d/%m/%Y') AND STR_TO_DATE('{startDate}', '%d/%m/%Y')")
         elif endDate:
             conditions.append(f"STR_TO_DATE(invnum.Date, '%d/%m/%Y') <= STR_TO_DATE('{endDate}', '%d/%m/%Y')")
         
@@ -1619,12 +1622,19 @@ async def filterInvHis(company_name: str, request: Request):
             conditions.append(f"invnum.Time BETWEEN '{startTime}' AND '{currTime}'")
         elif endTime:
             conditions.append(f"invnum.Time <= '{endTime}'")
+        if selectedOptionBranch and selectedOptionBranch != "Branches":
+            conditions.append(f"invnum.Branch = '{selectedOptionBranch}'")
         
+        if selectedOptionUser and selectedOptionUser != "Users":
+            conditions.append(f"invnum.User = '{selectedOptionUser}'")
+        
+        if selectedOptionSA and selectedOptionSA != "InvType":
+            conditions.append(f"invnum.InvType = '{selectedOptionSA}'")
         if not conditions:
             conditions.append("1 = 1")  # Default condition to return all records if no date/time is provided
         query = f"""
         SELECT 
-            invnum.User, invnum.InvNo, invnum.Branch, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv,
+            invnum.User, invnum.InvNo, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv, branch.Description as Branch,
             SUM(inv.Qty) AS TotalQty,
             SUM({GrossTotal}) AS GrossTotal, 
             SUM({TotalTaxItem}) AS TotalTaxItem,
@@ -1642,6 +1652,8 @@ async def filterInvHis(company_name: str, request: Request):
             invnum
         JOIN 
             inv ON inv.InvNo = invnum.InvNo
+        JOIN 
+            branch on branch.Code = invnum.Branch
         WHERE
             {" AND ".join(conditions)}
         GROUP BY invnum.InvNo
@@ -2531,6 +2543,27 @@ async def branch(
         branch_list = [dict(zip(column_names, br)) for br in fetchBranch]
         print("branch", branch_list)
         return branch_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/pos/distInvType/{company_name}")
+async def distInvType(
+        company_name: str,
+):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT distinct SAType from users ")
+        fetchSA = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        sa_list = [dict(zip(column_names, sa)) for sa in fetchSA]
+        print("sa_list", sa_list)
+        return sa_list
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
