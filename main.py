@@ -642,6 +642,7 @@ async def get_allitemswithmod(company_name: str):
         for item in items_list:
             if item['GroupNo'] == '':
                 item['GroupName'] = ' '  # or any default value you want
+        print("item list", items_list)
         return items_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -2457,3 +2458,82 @@ async def getCOHRead(company_name: str, username:str):
         raise e
     finally:
         pass
+    
+@app.post("/pos/updateBranch/{company_name}")
+async def updateBranch(
+        company_name: str,
+        request: Request,
+):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        for item in data:
+            exist_query = (
+                f"UPDATE branch SET Code = '{item['Code']}', Description = '{item['Description']}' WHERE Code = '{item['Code']}'"
+            )
+            cursor.execute(exist_query)
+        conn.commit()  # Commit the transaction after all updates
+        return {"message": "Branch updated successfully"}
+    except Exception as e:
+        print("Error details:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        # Close the cursor and connection
+        cursor.close()
+        conn.close()
+
+
+@app.post("/pos/addBranch/{company_name}/{branch_no}")
+async def addBranch(
+        company_name: str,
+        branch_no: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+
+        # Check if the user exists
+        addBranch_query = f"SELECT * FROM branch WHERE Code = %s"
+
+        cursor.execute(addBranch_query, (branch_no,))
+
+        existItem = cursor.fetchone()
+        if existItem is not None:
+            return {"message": "Branch already exists"}
+        data = await request.json()
+        insert_query = f"INSERT INTO branch(Code, Description) VALUES (%s, %s)"
+        cursor.execute(insert_query, (branch_no, ''))
+        conn.commit()
+        return {"message": "Branch added successfully", "branch": branch_no}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/pos/branch/{company_name}")
+async def branch(
+        company_name: str,
+):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM branch ")
+        fetchBranch = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        branch_list = [dict(zip(column_names, br)) for br in fetchBranch]
+        print("branch", branch_list)
+        return branch_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
