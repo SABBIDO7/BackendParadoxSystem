@@ -57,18 +57,23 @@ async def login(request: Request):
         company_name = data.get('company_name')
 
         user_query = (
-            f"SELECT * FROM users "
-            f"WHERE username = '{username}' AND password = '{password}' "
-        )       
+            f"SELECT users.*, branch.* "
+            f"FROM users "
+            f"JOIN branch ON users.Branch = branch.Code "
+            f"WHERE users.username = '{username}' AND users.password = '{password}'"
+        )    
         print(company_name)
         # Establish the database connection
         conn = get_db(company_name)
         if isinstance(conn, str):  # Check if conn is an error message
+            print("ana blll instanceeeeeeeee")
             return {"message": "Invalid Credentials"}  # Return the error message directly
         cursor = conn.cursor()
         cursor.execute(user_query)
         user = cursor.fetchone()
+        print("useeeeeeeeer queryyyy", user)
         if not user:
+            print("ana blll userrrrrrrrrrrrrrr ")
             return {"message": "Invalid Credentials"}
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
@@ -205,6 +210,7 @@ async def get_company(company_name: str):
         allcur = cursor.fetchall()
         column_n = [desc[0] for desc in cursor.description]
         curOb = [dict(zip(column_n, cur)) for cur in allcur]
+        print("compObbbbbbbbbbbbb", compOb)
 
         return {"compOb": compOb, "curOb": curOb}
     except HTTPException as e:
@@ -244,31 +250,43 @@ from fastapi import HTTPException, Request
 async def updateCompany(company_name: str, request: Request):
     try:
         conn = get_db(company_name)
+        print("eeeeeeeeeeeeeeeeeee",)
         cursor = conn.cursor()
         data = await request.json()
-        sql_query = (
-            f"UPDATE company SET Name = '{data['Name']}', "
-            f"Phone = '{data['Phone']}', "
-            f"Street = '{data['Street']}', "
-            f"Branch = '{data['Branch']}', "
-            f"City = '{data['City']}', "
-            f"Currency = '{data['Currency']}', "
-            f"Name2 = '{data['Name2']}', "
-            f"`EndTime` = '{data['EndTime']}', "
-            f"`Rate` = '{data['Rate']}', "
-            f"`KD` = '{data['KD']}' "
+        print("company dataaaaaaa", data)
+        # Define the SQL query with placeholders (%s)
+        sql_query = """
+    UPDATE company SET 
+        Name = %s, 
+        Phone = %s, 
+        Street = %s, 
+        Branch = %s, 
+        City = %s, 
+        Currency = %s, 
+        Name2 = %s, 
+        `EndTime` = %s, 
+        `Rate` = %s, 
+        `KD` = %s, 
+        `VAT` = %s
+"""
 
-        )
-        cursor.execute(sql_query)
+# Assuming `data` contains the values to be updated and `company_id` is the unique identifier
+        parameters = (
+    data['Name'], data['Phone'], data['Street'], data['Branch'], 
+    data['City'], data['Currency'], data['Name2'], data['EndTime'], 
+    data['Rate'], data['KD'], data['VAT']
+)
+
+        cursor.execute(sql_query, parameters)
         conn.commit()
+
         return {"message": "Company info successfully updated"}
     except Exception as e:
         print("Error details:", str(e))
         raise HTTPException(status_code=500, detail="Internal server error")
     finally:
-        # Close the cursor and connection
-        cursor.close()
-        conn.close()
+        if conn:
+            conn.close()
 
 
 @app.post("/pos/addusers/{company_name}/{user_name}")
@@ -295,8 +313,8 @@ async def add_user(
 
         # Get JSON data from request body
         data = await request.json()
-        insert_query = f"INSERT INTO users(username, password, user_control, email, sales, sales_return, purshase, purshase_return, orders, trans, items, chart, statement, SAType, Branch, COH, EOD) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        cursor.execute(insert_query, (user_name_uppercase, '', '', '', "N", "N", "N", "N", "N", "N", "N", "N", "N", "SA", '', user_name_uppercase, "N"))
+        insert_query = f"INSERT INTO users(username, password, user_control, email, sales, sales_return, purshase, purshase_return, orders, trans, items, chart, statement, SAType, Branch, COH, EOD, RecallInv) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(insert_query, (user_name_uppercase, '', '', '', "N", "N", "N", "N", "N", "N", "N", "N", "N", "SA", '', user_name_uppercase, "N", "N"))
 
         # Commit the changes to the database
         conn.commit()
@@ -424,10 +442,10 @@ async def post_invoiceitem(company_name: str, request: Request):
             cursor.execute(f"Update inv set TableNo='', UsedBy='' Where InvNo='{data['message']}'")
             # Update the invnum table
             cursor.execute(
-                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvKind = %s WHERE InvNo = %s;",
+                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvKind = %s, Tax = %s WHERE InvNo = %s;",
                 (
                     data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"],
-                    data["invType"], data["realDate"], data["time"], orderId, data["username"], data["invKind"], data['message']
+                    data["invType"], data["realDate"], data["time"], orderId, data["username"], data["invKind"], data["vat"], data['message']
                 )
             )
 
@@ -462,7 +480,7 @@ async def post_invoiceitem(company_name: str, request: Request):
                 cursor.execute(f"Insert into `order` () Values () ")
                 order_id = cursor.lastrowid
                 # Insert into invoices table
-                cursor.execute(f"INSERT INTO invnum (OrderId, AccountNo) VALUES ({order_id}, {data["accno"]}) ")
+                cursor.execute(f"INSERT INTO invnum (OrderId, AccountNo) VALUES ({order_id}, {data['accno']}) ")
                 # Get the last inserted invoice code
                 invoice_code = cursor.lastrowid
             if len(data["unsentMeals"]) == 0:
@@ -483,7 +501,7 @@ async def post_invoiceitem(company_name: str, request: Request):
                     (
                         data["invType"], inv_num if data["tableNo"] else invoice_code, item["ItemNo"], "barc", data["branch"],
                         item["quantity"], item["UPrice"],
-                        item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"], data["tableNo"] if data["tableNo"] else '', '', 'p' if data["tableNo"] else '', item["index"], 
+                        item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"], data["tableNo"] if data["tableNo"] else '', '', 'p', item["index"], 
                     )
                 )
 
@@ -503,14 +521,14 @@ async def post_invoiceitem(company_name: str, request: Request):
                                 (
                                     data["invType"], inv_num if data["tableNo"] else invoice_code, chosenModifier["ItemNo"], "barc",
                                     data["branch"], item["quantity"],
-                                    item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, data["tableNo"] if data["tableNo"] else '', '', 'p' if data["tableNo"] else '', item["index"],
+                                    item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, data["tableNo"] if data["tableNo"] else '', '', 'p', item["index"],
                                 )
                             )
             # Update the invnum table
             cursor.execute(
-                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvType=%s, InvKind =%s WHERE InvNo = %s;",
+                "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvType=%s, InvKind =%s, Tax = %s WHERE InvNo = %s;",
                 (
-                    data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], order_id, data["username"], data["invType"], data["invKind"], inv_num if data["tableNo"] else invoice_code
+                    data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], order_id, data["username"], data["invType"], data["invKind"], data["vat"], inv_num if data["tableNo"] else invoice_code
                 )
             )
 
@@ -776,7 +794,7 @@ async def add_item(
             return {"message": "Item already exists"}
         data = await request.json()
         insert_query = f"INSERT INTO items(ItemNo, GroupNo, ItemName, Image, UPrice, Disc, Tax, KT1, KT2, KT3, KT4, Active, Ingredients) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        cursor.execute(insert_query, (item_no, '', '', '', 0.0, 0.0, 0.0, '', '', '', '', 'N', ''))
+        cursor.execute(insert_query, (item_no, '', '', '', 0.0, 0.0, 0.0, '', '', '', '', 'Y', ''))
         conn.commit()
         return {"message": "Item added successfully", "item": item_no}
     except HTTPException as e:
@@ -1545,11 +1563,10 @@ async def getAllInv(company_name: str, invNo: str):
         cursor = conn.cursor()
         totalItem = f" ((inv.Qty * inv.UPrice * (1-inv.Disc/100)) * inv.Tax/100) + (inv.Qty * inv.UPrice * (1-inv.Disc/100)) "
         cursor.execute(f"""
-            SELECT inv.UPrice, inv.Qty, inv.Disc, inv.Tax, items.ItemName, {totalItem} as totalItem, invnum.InvType, invnum.InvNo, invnum.Date, invnum.RealDate, invnum.Time, groupitem.GroupName
+            SELECT inv.UPrice, inv.Qty, inv.Disc, inv.Tax, items.ItemName, {totalItem} as totalItem, invnum.InvType, invnum.InvNo, invnum.Date, invnum.RealDate, invnum.Time
             FROM inv
              JOIN items ON inv.ItemNo = items.ItemNo
              JOIN invnum ON inv.InvNo = invnum.InvNo
-             JOIN groupitem on groupitem.GroupNo=inv.GroupNo
             WHERE inv.InvNo = '{invNo}'
         """)
 
@@ -1604,7 +1621,7 @@ async def filterInvHis(company_name: str, request: Request):
         discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc) / 100 "
         TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1 - invnum.Disc / 100) "
         totalTaxSD = f" ({TotalTaxItem} * (1 + invnum.Srv / 100) * (1 - invnum.Disc / 100)) "
-        totall = f" ({serviceValue} * 11 / 100) * (1 - invnum.Disc / 100) "
+        totall = f" ({serviceValue} * invnum.Tax / 100) * (1 - invnum.Disc / 100) "
         totalTax = f" {totalTaxSD} + {totall} "
         
         conditions = []
@@ -1634,7 +1651,7 @@ async def filterInvHis(company_name: str, request: Request):
             conditions.append("1 = 1")  # Default condition to return all records if no date/time is provided
         query = f"""
         SELECT 
-            invnum.User, invnum.InvNo, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv, branch.Description as Branch,
+            invnum.User, invnum.InvNo, invnum.InvType, invnum.Date, invnum.Time, invnum.RealDate, invnum.Disc, invnum.Srv, branch.Description as Branch, invnum.Tax,
             SUM(inv.Qty) AS TotalQty,
             SUM({GrossTotal}) AS GrossTotal, 
             SUM({TotalTaxItem}) AS TotalTaxItem,
@@ -1652,8 +1669,8 @@ async def filterInvHis(company_name: str, request: Request):
             invnum
         JOIN 
             inv ON inv.InvNo = invnum.InvNo
-        JOIN 
-            branch on branch.Code = invnum.Branch
+         JOIN 
+             branch on branch.Code = invnum.Branch
         WHERE
             {" AND ".join(conditions)}
         GROUP BY invnum.InvNo
@@ -1662,6 +1679,7 @@ async def filterInvHis(company_name: str, request: Request):
         all_inv = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         inv_list = [dict(zip(column_names, inv)) for inv in all_inv]
+        print(inv_list)
         return inv_list
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1736,7 +1754,7 @@ async def getDailySalesDetails(company_name: str, ItemNo: str, current_date):
         discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc) / 100 "
         TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1 - invnum.Disc / 100) "
         totalTaxSD = f" ({TotalTaxItem} * (1 + invnum.Srv / 100) * (1 - invnum.Disc / 100)) "
-        totall = f" ({serviceValue} * 11 / 100) * (1 - invnum.Disc / 100) "
+        totall = f" ({serviceValue} * invnum.Tax / 100) * (1 - invnum.Disc / 100) "
         totalTax = f" {totalTaxSD} + {totall} "
         cursor.execute(f"Select *, SUM({totalTax} + {TotalDiscount}) AS totalFinal FROM inv inner join invnum on inv.InvNo = invnum.InvNo WHERE  inv.ItemNo ='{ItemNo}' and invnum.Date='{formatted_date}' GROUP BY invnum.InvNo ")
 
@@ -1889,6 +1907,7 @@ async def getAllowPrint(company_name: str):
         cursor.execute(f"Select QtyPrintKT, DefaultPrinter, AllowPrintInv, AllowPrintKT from stations ")
         result = cursor.fetchone()
         qtyPrintKT, defaultPrinter, allowInv, allowKT = result
+        print("allowwwwwwwwwwwwww", result)
         return {"qtyPrintKT":qtyPrintKT, "defaultPrinter":defaultPrinter, "allowInv": allowInv, "allowKT":allowKT}
     except HTTPException as e:
         print("Error details:", e.detail)
@@ -1900,7 +1919,7 @@ async def getAllowPrint(company_name: str):
 async def databaseCreation(company_name: str):
     try:
         # Connect to MySQL server
-        conn = mariadb.connector.connect(
+        conn = mariadb.connect(
          user= "root",
     password = "Hkms0ft",
     host= "80.81.158.76",
@@ -1941,16 +1960,17 @@ AUTO_INCREMENT=400011
 """
         cursor.execute(createClient)
         createCompany="""CREATE TABLE `company` (
-	`Name` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`Phone` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`Street` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`Branch` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`City` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`Currency` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`Name2` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`EndTime` VARCHAR(300) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`Rate` DOUBLE NULL DEFAULT NULL,
-	`KD` VARCHAR(2) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`Name` VARCHAR(100) NOT NULL COLLATE 'latin1_swedish_ci',
+	`Phone` VARCHAR(100) NOT NULL COLLATE 'latin1_swedish_ci',
+	`Street` VARCHAR(100) NOT NULL COLLATE 'latin1_swedish_ci',
+	`Branch` VARCHAR(100) NOT NULL COLLATE 'latin1_swedish_ci',
+	`City` VARCHAR(100) NOT NULL COLLATE 'latin1_swedish_ci',
+	`Currency` VARCHAR(100) NOT NULL COLLATE 'latin1_swedish_ci',
+	`Name2` VARCHAR(100) NOT NULL COLLATE 'latin1_swedish_ci',
+	`EndTime` VARCHAR(300) NOT NULL COLLATE 'latin1_swedish_ci',
+	`Rate` DOUBLE NOT NULL,
+	`VAT` VARCHAR(21) NOT NULL COLLATE 'latin1_swedish_ci',
+	`KD` VARCHAR(2) NOT NULL COLLATE 'latin1_swedish_ci',
 	UNIQUE INDEX `ix_company_name` (`Name`) USING BTREE
 )
 COLLATE='latin1_swedish_ci'
@@ -2024,18 +2044,24 @@ ENGINE=InnoDB
 	`InvNo` INT(11) NOT NULL AUTO_INCREMENT,
 	`Date` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
 	`Time` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
-	`AccountNo` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`AccountNo` INT(11) NULL DEFAULT NULL,
 	`CardNo` VARCHAR(20) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
 	`Branch` VARCHAR(10) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
 	`Disc` DOUBLE NULL DEFAULT NULL,
 	`Srv` DOUBLE NULL DEFAULT NULL,
 	`RealDate` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
 	`RealTime` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`OrderId` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`CashOnHand` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`EOD` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`User` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`InvKind` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+    `Tax` DOUBLE NULL DEFAULT NULL,
 	UNIQUE INDEX `InvNo` (`InvNo`) USING BTREE
 )
 COLLATE='latin1_swedish_ci'
 ENGINE=InnoDB
-AUTO_INCREMENT=227
+AUTO_INCREMENT=76
 ;
 """
         cursor.execute(createInvNum)
@@ -2133,15 +2159,72 @@ ENGINE=InnoDB
 	`statement` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
 	`SAType` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
 	`Branch` VARCHAR(100) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`COH` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+	`EOD` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
+    `RecallInv` VARCHAR(50) NULL DEFAULT NULL COLLATE 'latin1_swedish_ci',
 	PRIMARY KEY (`id`) USING BTREE,
 	INDEX `ix_users_id` (`id`) USING BTREE
 )
 COLLATE='latin1_swedish_ci'
 ENGINE=InnoDB
-AUTO_INCREMENT=3
+AUTO_INCREMENT=1
 ;
+
 """
         cursor.execute(createUsers)
+
+        createBranch = """CREATE TABLE `branch` (
+	`Code` VARCHAR(50) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci',
+	`Description` VARCHAR(50) NULL DEFAULT NULL COLLATE 'utf8mb4_general_ci'
+)
+COLLATE='utf8mb4_general_ci'
+ENGINE=InnoDB
+;
+"""
+        cursor.execute(createBranch)
+
+        createOrder = """CREATE TABLE `order` (
+	`OrderId` INT(11) NOT NULL AUTO_INCREMENT,
+	UNIQUE INDEX `OrderId` (`OrderId`) USING BTREE
+)
+COLLATE='utf8mb4_general_ci'
+ENGINE=InnoDB
+AUTO_INCREMENT=121
+;
+"""
+        cursor.execute(createOrder)
+
+        insertCompany = """
+            INSERT INTO company (Name, Phone, Street, Branch, City, Currency, Name2, EndTime, Rate, VAT, KD)
+             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                      """
+        values = (company_name, '', '', '', '', '1', '', '00:00:00', 89000, 11, '*')
+        cursor.execute(insertCompany, values)
+        insertUser = """
+    INSERT INTO users(
+        username, password, user_control, email, sales, sales_return, purshase, 
+        purshase_return, orders, trans, items, chart, statement, SAType, Branch, COH, EOD, RecallInv
+    ) 
+    VALUES ('hkm', '123', 'Y', '', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N', 'SA', '1', 'All', 'Y', 'N');
+"""
+        cursor.execute(insertUser)
+
+        insertBranch = """
+    INSERT INTO branch(
+        Code, Description
+    ) 
+    VALUES ('1', 'Cornish El Mazraa');
+"""
+        cursor.execute(insertBranch)
+
+        insertCurrency = """
+    INSERT INTO currencies(
+       id, name, Code
+    ) 
+    VALUES ('1', 'United States Dollars', 'USD'), ('2', 'LBP', 'LBP');;
+"""
+        cursor.execute(insertCurrency)
+        conn.commit()
 
     except Exception as e:
         raise e
@@ -2238,7 +2321,7 @@ async def resetOrderId(company_name: str, request: Request):
         conn = get_db(company_name)
         cursor = conn.cursor()
         data = await request.json()
-        cursor.execute(f" Update invnum set EOD='{data["dateTime"]}'  where Date = '{data["date"]}' ")
+        cursor.execute(f" Update invnum set EOD='{data['dateTime']}'  where Date = '{data['date']}' ")
         cursor.execute(f"Delete from `order` ") 
         conn.commit()
         cursor.execute("ALTER TABLE `order` AUTO_INCREMENT = 1")
@@ -2257,13 +2340,14 @@ async def getReportUserShift(company_name: str, date:str, allowedUser: str):
         cursor = conn.cursor()
         formatted_date = date.replace('.', '/')
         # cursor.execute(f"SELECT InvType, InvNo, Date, Time, Branch, Disc, Srv, User FROM invnum WHERE Date='{formatted_date}' ")
+       
         GrossTotal = f" inv.UPrice * (1 - inv.Disc / 100) * inv.Qty "
         TotalTaxItem = f" (inv.UPrice *(1-inv.Disc/100) * inv.Tax) / 100 "
         serviceValue= f" {GrossTotal} * invnum.Srv/100 "
         discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc)/100 "
         TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1-invnum.Disc/100) "
         totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
-        totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
+        totall = f" ({serviceValue}* invnum.Tax/100 ) * (1-invnum.Disc/100) "
         totalTax= f" {totalTaxSD} + {totall} "
         base_query = f"""
         SELECT 
@@ -2336,7 +2420,7 @@ async def calculateUserShifts(company_name: str, date: str, allowedUser: str):
         discountValue = f" (({GrossTotal} + {serviceValue}) * invnum.Disc)/100 "
         TotalDiscount = f" ({GrossTotal} + {serviceValue}) * (1-invnum.Disc/100) "
         totalTaxSD = f" ({TotalTaxItem} * (1+invnum.Srv/100) * (1-invnum.Disc/100)) "
-        totall = f" ({serviceValue}*11/100 ) * (1-invnum.Disc/100) "
+        totall = f" ({serviceValue}* invnum.Tax/100 ) * (1-invnum.Disc/100) "
         totalTax= f" {totalTaxSD} + {totall} "
         base_query = f"""
         SELECT 
@@ -2351,8 +2435,8 @@ async def calculateUserShifts(company_name: str, date: str, allowedUser: str):
             SUM({totalTax} + {TotalDiscount}) AS totalFinal,
             SUM({discountValue}) AS discountValue,
             SUM({serviceValue}) AS serviceValue,
-            SUM(invnum.Disc) AS disc,
-            SUM(invnum.Srv) AS srv,
+            SUM(invnum.Disc) AS ee,
+            SUM(invnum.Srv) AS dd,
             COUNT(DISTINCT invnum.InvNo) AS TotalInvoices
         FROM 
             invnum
@@ -2369,6 +2453,7 @@ async def calculateUserShifts(company_name: str, date: str, allowedUser: str):
         report_data = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         report_list = [dict(zip(column_names, row)) for row in report_data]
+        print("antoooooooooo", report_list)
         return report_list
     except Exception as e:
         print("Error details:", str(e))
@@ -2564,6 +2649,121 @@ async def distInvType(
         sa_list = [dict(zip(column_names, sa)) for sa in fetchSA]
         print("sa_list", sa_list)
         return sa_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/pos/getVAT/{company_name}")
+async def getVAT(
+        company_name: str,
+):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT VAT from company ")
+        vat = cursor.fetchone()
+        column_names = [desc[0] for desc in cursor.description]
+        va_list = dict(zip(column_names, vat))
+        print("sa_list", va_list)
+        return va_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/pos/updatePrint/{company_name}")
+async def updatePrint(
+        company_name: str,
+        request: Request,
+):
+    conn = None
+    try:
+        # Check if the user exists in the given company
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        data = await request.json()
+        print("ANA JDIDDDDDD", data)
+        cursor.execute(f"Update stations set AllowPrintInv='{data['allowPrintInv']}', AllowPrintKT='{data['allowPrintKT']}' ")
+        conn.commit() 
+        return {"message": "print updated successfully", }
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/pos/getRecallInv/{company_name}/{invNo}/{loggedType}")
+async def getRecallInv(company_name: str, invNo: str, loggedType: str):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        if "SA" in invNo or "sa" in invNo:
+            inv_type, inv_no = invNo.split("-", 1)
+            inv_type = inv_type.strip().upper()
+            inv_no = inv_no.strip()
+        else:
+            inv_no = invNo
+            inv_type = loggedType
+        # Check if the updated ItemNo already exists and is not the same as the original one
+        existing_table_query = """
+                    SELECT *
+                    FROM inv
+                    WHERE InvNo = %s and InvType = %s LIMIT 1
+                """
+        cursor.execute(existing_table_query, (inv_no,inv_type))
+        existing_inv = cursor.fetchone()
+        # Get column names from cursor.description if result set exists
+        if existing_inv:
+            cursor.execute(f"Select Disc, Srv from invnum where InvNo ='{inv_no}'")
+            result = cursor.fetchone()
+            disc, srv = result
+            cursor.execute(f" Select `Index` from inv where InvNo= '{inv_no}' Group By `Index` ")
+            extract_indexes = cursor.fetchall()
+            inv_list = []
+            if extract_indexes and extract_indexes[0][0] is not None:
+
+                for e_index_row in extract_indexes:
+                    e_index = e_index_row[0]
+                    query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.InvNo = '{inv_no}' and inv.GroupNo != 'MOD' "
+                    cursor.execute(query)
+                    princ_items = cursor.fetchone()
+                    column_names = [desc[0] for desc in cursor.description]
+                    princ_item = dict(zip(column_names, princ_items))
+                    query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.InvNo = '{inv_no}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
+                    cursor.execute(query2)
+                    item_mods = cursor.fetchall()
+                    column_names = [desc[0] for desc in cursor.description]
+                    item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
+                    item = {
+                        "ItemNo": princ_item["ItemNo"],
+                        "ItemName": princ_item["ItemName"],
+                        "Printed": princ_item["Printed"],
+                        "UPrice": princ_item["UPrice"],
+                        "Disc": princ_item["Disc"],
+                        "Tax": princ_item["Tax"],
+                        "quantity": princ_item["Qty"],
+                        "KT1": princ_item["KT1"],
+                        "KT2": princ_item["KT2"],
+                        "KT3": princ_item["KT3"],
+                        "KT4": princ_item["KT4"],
+                        "index": princ_item["Index"],
+                        "GroupNo": princ_item["GroupNo"],
+                        "chosenModifiers": [
+                            {"ItemNo": itemod["ItemNo"], "ItemName": itemod["ItemName"]}
+                            for itemod in item_mod
+                        ]
+                    }
+                    inv_list.append(item)
+                return {"inv_list": inv_list, "invNo": inv_no, "disc": disc, "srv": srv, "invType": inv_type }
+        return {"message": "No invoice with this number"}
     except HTTPException as e:
         print("Error details:", e.detail)
         raise e
