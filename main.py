@@ -267,14 +267,15 @@ async def updateCompany(company_name: str, request: Request):
         `EndTime` = %s, 
         `Rate` = %s, 
         `KD` = %s, 
-        `VAT` = %s
+        `VAT` = %s, 
+        `Pay` = %s
 """
 
 # Assuming `data` contains the values to be updated and `company_id` is the unique identifier
         parameters = (
     data['Name'], data['Phone'], data['Street'], data['Branch'], 
     data['City'], data['Currency'], data['Name2'], data['EndTime'], 
-    data['Rate'], data['KD'], data['VAT']
+    data['Rate'], data['KD'], data['VAT'], data["Pay"]
 )
 
         cursor.execute(sql_query, parameters)
@@ -424,6 +425,7 @@ async def post_invoiceitem(company_name: str, request: Request):
         data = await request.json()
         print("Adadaf", data)
         items_by_kitchen = defaultdict(list)
+        print("closeeeeeeeeeeeeee", data["closeTClicked"])
         if data["meals"] == []:
             return {"message": "Invoice is empty"}
         # Create a dictionary to store items grouped by kitchen code
@@ -440,6 +442,17 @@ async def post_invoiceitem(company_name: str, request: Request):
             print("tttttttttttttttttt", tableno)
             cursor.execute(f"Update tablesettings set UsedBy='' Where TableNo= '{tableno}'")
             cursor.execute(f"Update inv set TableNo='', UsedBy='' Where InvNo='{data['message']}'")
+            for amount_data in data["selectedAmounts"]:    
+                cursor.execute(
+                 "INSERT INTO paymentdetails (InvNo, Currency, Amount, PayType, PaymentMethod) VALUES (%s, %s, %s, %s, %s);",
+                 (
+                 data["message"],  # The invoice number, assuming 'inv_num' is already defined
+                 amount_data["currency"],  # Currency
+                 amount_data["amount"],  # Amount
+                 amount_data["payType"],  # PayType
+                 amount_data["paymentMethod"],  # PaymentMethod
+                  )
+                 )
             # Update the invnum table
             cursor.execute(
                 "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, InvType=%s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvKind = %s, Tax = %s WHERE InvNo = %s;",
@@ -469,6 +482,12 @@ async def post_invoiceitem(company_name: str, request: Request):
             order_id = ''
             invoice_code = 1
             accno = 1
+            # if data["renewInv"]:
+            #     print("anaaa fetertttttttttttt", data["message"])
+            #     cursor.execute(f"Select OrderId from invnum where InvNo = '{data["message"]}' ")
+            #     order_id = cursor.fetchone()
+            #     print("anaa honnnnnnnn", order_id)
+            #     cursor.execute(f"DELETE FROM inv WHERE InvNo = '{data["message"]}'")
             if data['tableNo']:
                 cursor.execute(f" Select InvNo from inv where tableNo = '{data['tableNo']}'  LIMIT 1")
                 inv_row = cursor.fetchone()
@@ -476,6 +495,12 @@ async def post_invoiceitem(company_name: str, request: Request):
                 cursor.execute(f"Select OrderId from invnum where InvNo = '{inv_num}' ")
                 order_id = cursor.fetchone()[0]
                 cursor.execute(f"DELETE FROM inv WHERE InvNo = '{inv_num}'")
+            elif data["renewInv"]:
+                print("anaaa fetertttttttttttt", data["message"])
+                cursor.execute(f"Select OrderId from invnum where InvNo = '{data["message"]}' ")
+                order_id = cursor.fetchone()[0]
+                print("anaa honnnnnnnn", order_id)
+                cursor.execute(f"DELETE FROM inv WHERE InvNo = '{data["message"]}'")
             else:
                 cursor.execute(f"Insert into `order` () Values () ")
                 order_id = cursor.lastrowid
@@ -485,6 +510,7 @@ async def post_invoiceitem(company_name: str, request: Request):
                 invoice_code = cursor.lastrowid
             if len(data["unsentMeals"]) == 0:
                 return {"message": "The meals already sent to kitchen"}
+
             # Group meals by printer names
             for meal in data["unsentMeals"]:
                 printer_names = [printer_dic.get(meal[kt_key], "") for kt_key in keys_to_group_by]
@@ -499,7 +525,7 @@ async def post_invoiceitem(company_name: str, request: Request):
                 cursor.execute(
                     "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                     (
-                        data["invType"], inv_num if data["tableNo"] else invoice_code, item["ItemNo"], "barc", data["branch"],
+                        data["invType"],  inv_num if data["tableNo"] else (data["message"] if data["renewInv"] else invoice_code), item["ItemNo"], "barc", data["branch"],
                         item["quantity"], item["UPrice"],
                         item["Disc"], item["Tax"], item["GroupNo"], item["KT1"], item["KT2"], item["KT3"], item["KT4"], data["tableNo"] if data["tableNo"] else '', '', 'p', item["index"], 
                     )
@@ -519,16 +545,28 @@ async def post_invoiceitem(company_name: str, request: Request):
                             cursor.execute(
                                 "INSERT INTO inv (InvType, InvNo, ItemNo, Barcode, Branch, Qty, UPrice, Disc, Tax, GroupNo, KT1, KT2, KT3, KT4, TableNo, UsedBy, Printed, `Index`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                                 (
-                                    data["invType"], inv_num if data["tableNo"] else invoice_code, chosenModifier["ItemNo"], "barc",
+                                    data["invType"], inv_num if data["tableNo"] else (data["message"] if data["renewInv"] else invoice_code), chosenModifier["ItemNo"], "barc",
                                     data["branch"], item["quantity"],
                                     item["UPrice"], disc, tax, group_no, kt1, kt2, kt3, kt4, data["tableNo"] if data["tableNo"] else '', '', 'p', item["index"],
                                 )
                             )
             # Update the invnum table
+            print("ana nnnnnnnnnnnn")
+            for amount_data in data["selectedAmounts"]:    
+                cursor.execute(
+                 "INSERT INTO paymentdetails (InvNo, Currency, Amount, PayType, PaymentMethod) VALUES (%s, %s, %s, %s, %s);",
+                 (
+                 inv_num if data["tableNo"] else (data["message"] if data["renewInv"] else invoice_code),  # The invoice number, assuming 'inv_num' is already defined
+                 amount_data["currency"],  # Currency
+                 amount_data["amount"],  # Amount
+                 amount_data["payType"],  # PayType
+                 amount_data["paymentMethod"],  # PaymentMethod
+                  )
+                 )
             cursor.execute(
                 "UPDATE invnum SET Date = %s, Time= %s, AccountNo = %s, CardNo = %s, Branch = %s, Disc = %s, Srv = %s, RealDate=%s, RealTime=%s, OrderId=%s, User=%s, InvType=%s, InvKind =%s, Tax = %s WHERE InvNo = %s;",
                 (
-                    data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], order_id, data["username"], data["invType"], data["invKind"], data["vat"], inv_num if data["tableNo"] else invoice_code
+                    data["date"], data["time"], data["accno"], "cardno", data["branch"], data["discValue"], data["srv"], data["realDate"], data["time"], order_id, data["username"], data["invType"], data["invKind"], data["vat"], inv_num if data["tableNo"] else (data["message"] if data["renewInv"] else invoice_code)
                 )
             )
 
@@ -2770,3 +2808,237 @@ async def getRecallInv(company_name: str, invNo: str, loggedType: str):
     finally:
         if conn:
             conn.close()
+
+@app.post("/pos/getBackInv/{company_name}/{loggedType}")
+async def getBackInv(company_name: str, loggedType: str, request: Request,):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        inv_type = loggedType
+        data = await request.json()
+        
+        if data["message"]:  
+            message = int(data["message"])
+            cursor.execute("SELECT InvNo, Date, Time FROM invnum WHERE InvType = %s AND InvNo < %s ORDER BY InvNo DESC LIMIT 1", 
+               (loggedType, message))
+            result = cursor.fetchone()
+            inv_no = result[0] if result else None
+            recallDate = result[1]
+            recallTime = result[2]
+        else:
+            cursor.execute(
+            "SELECT InvNo, Date, Time FROM invnum WHERE InvType = %s ORDER BY InvNo DESC LIMIT 1",
+            (loggedType,)
+            )
+            result = cursor.fetchone()
+            inv_no = result[0] if result else None
+            recallDate = result[1]
+            recallTime = result[2]
+        print("invvvvv no", inv_no)
+        print("invvv typeeeeeeee", inv_type)
+        # Check if the updated ItemNo already exists and is not the same as the original one
+        existing_table_query = """
+                    SELECT *
+                    FROM inv
+                    WHERE InvNo = %s and InvType = %s LIMIT 1
+                """
+        
+        cursor.execute(existing_table_query, (inv_no,inv_type))
+        existing_inv = cursor.fetchone()
+        print("existingggg", existing_inv)
+        # Get column names from cursor.description if result set exists
+        if existing_inv:
+            print("anaafafafaagag")
+            cursor.execute(f"Select Disc, Srv from invnum where InvNo ='{inv_no}'")
+            result = cursor.fetchone()
+            column_names = [desc[0] for desc in cursor.description]
+            inf = dict(zip(column_names, result))
+            print("aaaaaaaaaaaaaaaaaaaaa", inf)
+            cursor.execute(f"Select * from paymentdetails Where InvNo ='{inv_no}' ")
+            payDetails = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            payDetailList = [dict(zip(column_names, payDetail)) for payDetail in payDetails]
+            cursor.execute(f" Select `Index` from inv where InvNo= '{inv_no}' Group By `Index` ")
+            extract_indexes = cursor.fetchall()
+            inv_list = []
+            if extract_indexes and extract_indexes[0][0] is not None:
+
+                for e_index_row in extract_indexes:
+                    e_index = e_index_row[0]
+                    query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.InvNo = '{inv_no}' and inv.GroupNo != 'MOD' "
+                    cursor.execute(query)
+                    princ_items = cursor.fetchone()
+                    column_names = [desc[0] for desc in cursor.description]
+                    princ_item = dict(zip(column_names, princ_items))
+                    query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.InvNo = '{inv_no}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
+                    print(query2)
+                    cursor.execute(query2)
+                    item_mods = cursor.fetchall()
+                    column_names = [desc[0] for desc in cursor.description]
+                    item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
+                    item = {
+                        "ItemNo": princ_item["ItemNo"],
+                        "ItemName": princ_item["ItemName"],
+                        "Printed": princ_item["Printed"],
+                        "UPrice": princ_item["UPrice"],
+                        "Disc": princ_item["Disc"],
+                        "Tax": princ_item["Tax"],
+                        "quantity": princ_item["Qty"],
+                        "KT1": princ_item["KT1"],
+                        "KT2": princ_item["KT2"],
+                        "KT3": princ_item["KT3"],
+                        "KT4": princ_item["KT4"],
+                        "index": princ_item["Index"],
+                        "GroupNo": princ_item["GroupNo"],
+                        "chosenModifiers": [
+                            {"ItemNo": itemod["ItemNo"], "ItemName": itemod["ItemName"]}
+                            for itemod in item_mod
+                        ]
+                    }
+                    inv_list.append(item)
+                return {"inv_list": inv_list, "invNo": inv_no, "inf": inf, "invType": inv_type, "recallDate": recallDate, "recallTime":recallTime, "payDetailList": payDetailList }
+        return {"message": "No invoice with this number"}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/pos/getNextInv/{company_name}/{loggedType}")
+async def getNextInv(company_name: str, loggedType: str, request: Request,):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        inv_type = loggedType
+        data = await request.json()
+        
+        if data["message"]:  
+            message = int(data["message"])
+            cursor.execute("SELECT InvNo, Date, Time FROM invnum WHERE InvType = %s AND InvNo > %s ORDER BY InvNo ASC LIMIT 1", 
+               (loggedType, message))
+            result = cursor.fetchone()
+            inv_no = result[0] if result else None
+            recallDate = result[1] if result else None
+            recallTime = result[2] if result else None
+        else:
+            return
+        
+        print("invvvvv no", inv_no)
+        print("invvv typeeeeeeee", inv_type)
+        # Check if the updated ItemNo already exists and is not the same as the original one
+        existing_table_query = """
+                    SELECT *
+                    FROM inv
+                    WHERE InvNo = %s and InvType = %s LIMIT 1
+                """
+        cursor.execute(existing_table_query, (inv_no,inv_type))
+        existing_inv = cursor.fetchone()
+        # Get column names from cursor.description if result set exists
+        if existing_inv:
+            cursor.execute(f"Select Disc, Srv from invnum where InvNo ='{inv_no}'")
+            result = cursor.fetchone()
+            disc, srv = result
+            cursor.execute(f"Select * from paymentdetails Where InvNo ='{inv_no}' ")
+            payDetails = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            payDetailList = [dict(zip(column_names, payDetail)) for payDetail in payDetails]
+            cursor.execute(f" Select `Index` from inv where InvNo= '{inv_no}' Group By `Index` ")
+            extract_indexes = cursor.fetchall()
+            inv_list = []
+            if extract_indexes and extract_indexes[0][0] is not None:
+
+                for e_index_row in extract_indexes:
+                    e_index = e_index_row[0]
+                    query = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo where inv.Index = {e_index} and inv.InvNo = '{inv_no}' and inv.GroupNo != 'MOD' "
+                    cursor.execute(query)
+                    princ_items = cursor.fetchone()
+                    column_names = [desc[0] for desc in cursor.description]
+                    princ_item = dict(zip(column_names, princ_items))
+                    query2 = f" Select inv.*, items.ItemName from inv left join items on inv.ItemNo = items.ItemNo Where inv.InvNo = '{inv_no}' and inv.Index = {e_index} and inv.GroupNo = 'MOD' "
+                    cursor.execute(query2)
+                    item_mods = cursor.fetchall()
+                    column_names = [desc[0] for desc in cursor.description]
+                    item_mod = [dict(zip(column_names, imod)) for imod in item_mods]
+                    item = {
+                        "ItemNo": princ_item["ItemNo"],
+                        "ItemName": princ_item["ItemName"],
+                        "Printed": princ_item["Printed"],
+                        "UPrice": princ_item["UPrice"],
+                        "Disc": princ_item["Disc"],
+                        "Tax": princ_item["Tax"],
+                        "quantity": princ_item["Qty"],
+                        "KT1": princ_item["KT1"],
+                        "KT2": princ_item["KT2"],
+                        "KT3": princ_item["KT3"],
+                        "KT4": princ_item["KT4"],
+                        "index": princ_item["Index"],
+                        "GroupNo": princ_item["GroupNo"],
+                        "chosenModifiers": [
+                            {"ItemNo": itemod["ItemNo"], "ItemName": itemod["ItemName"]}
+                            for itemod in item_mod
+                        ]
+                    }
+                    inv_list.append(item)
+                return {"inv_list": inv_list, "invNo": inv_no, "disc": disc, "srv": srv, "invType": inv_type, "recallDate": recallDate, "recallTime": recallTime, "payDetailList": payDetailList }
+        return {"message": "No invoice with this number"}
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+@app.get("/pos/Visa/{company_name}")
+async def getVisa(company_name: str):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT Visa FROM visa")
+        visa_tuple = cursor.fetchall()
+        
+        if visa_tuple is None:
+            return {"error": "No Visa data found"}
+
+        # Convert the tuple to a list, excluding None values
+        visa_list = [visa for visa in visa_tuple if visa is not None]
+        
+        print("Visa List:", visa_list)
+        return visa_list
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+# @app.post("/pos/subCash/{company_name}")
+# async def getNextInv(company_name: str, request: Request,):
+#     conn = None
+#     try:
+#         conn = get_db(company_name)
+#         cursor = conn.cursor()
+#         data = await request.json()
+#         cursor.execute(
+#             """
+#             INSERT INTO pay (InvNo, PayType, CurrUSDIn, CurrUSDOut, CurrLBPIn, CurrLBPOut) 
+#             VALUES (%s, %s, %s, %s, %s, %s)
+#             """,
+#             (
+#                 data["message"],
+#                 data["paymentMethod"],
+#                 data["payInUSD"],
+#                 data["payOutUSD"],
+#                 data["payInLBP"],
+#                 data["payOutLBP"],
+#             )
+#         )
+#         conn.commit()
+#         return {"message": "Inserted"}
+#     except HTTPException as e:
+#         print("Error details:", e.detail)
+#         raise e
+#     finally:
+#         if conn:
+#             conn.close()
