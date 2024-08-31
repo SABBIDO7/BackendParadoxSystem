@@ -3013,6 +3013,48 @@ async def getVisa(company_name: str):
     finally:
         if conn:
             conn.close()
+
+
+@app.get("/pos/getAmountsCurrency/{company_name}/{amount_code}")
+async def getAmountsCurrency(company_name: str, amount_code: str):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        print("currency code", amount_code)
+        cursor.execute(f"SELECT amount FROM currencyamount WHERE Code='{amount_code}' ")
+        amount_details = cursor.fetchall()
+         # Extract amounts from the tuples into a flat list
+        amountList = [amount[0] for amount in amount_details]
+        
+        print("amounts List:", amountList)
+        return amountList
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/pos/getAllCurrencies/{company_name}")
+async def getAllCurrencies(company_name: str):
+    conn = None
+    try:
+        conn = get_db(company_name)
+        cursor = conn.cursor()
+        cursor.execute(f"Select * from currencies ")
+        currencyDetails = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        currencyList = [dict(zip(column_names, currencyDetail)) for currencyDetail in currencyDetails]
+        
+        print("currency List:", currencyList)
+        return currencyList
+    except HTTPException as e:
+        print("Error details:", e.detail)
+        raise e
+    finally:
+        if conn:
+            conn.close()
 # @app.post("/pos/subCash/{company_name}")
 # async def getNextInv(company_name: str, request: Request,):
 #     conn = None
